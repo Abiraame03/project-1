@@ -1,7 +1,6 @@
 streamlit==1.28.0
 tensorflow==2.20.0
-pillow==9.5.0
-numpy==1.25.0
+numpy>=1.26.0
+pillow>=9.5.0
 pyttsx3==2.90
-pywin32==305; platform_system=="Windows"
-pyobjc==8.3; platform_system=="Darwin"
+opencv-python-headless==4.8.1.1
