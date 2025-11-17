@@ -10,7 +10,7 @@ import io
 import wave
 import struct
 import random
-import requests # Added for making HTTP API calls
+import requests
 
 # --- Set Up Gemini API Configuration ---
 # Leave apiKey as an empty string; the environment will handle it.
@@ -186,8 +186,12 @@ def generate_tts_audio(text_to_speak):
         "model": TTS_MODEL
     }
     
-    url = f"{TTS_API_URL}?key={API_KEY}"
-    
+    # Build URL: only append key if API_KEY is not empty
+    if API_KEY:
+        url = f"{TTS_API_URL}?key={API_KEY}"
+    else:
+        url = TTS_API_URL # URL without empty key parameter
+
     # Implementing Exponential Backoff
     max_retries = 5
     base_delay = 1
@@ -195,7 +199,7 @@ def generate_tts_audio(text_to_speak):
     for attempt in range(max_retries):
         try:
             # Synchronous API call
-            response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10) # Added timeout
+            response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10)
             response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
             
             result = response.json()
@@ -228,7 +232,7 @@ def generate_tts_audio(text_to_speak):
             break
     
     # --- FALLBACK MECHANISM ---
-    # Convert the silent WAV base64 string to raw bytes for st.audio
+    # Return the base64 string of the silent WAV file
     return SILENT_WAV_BASE64
 
 # --- Streamlit UI ---
@@ -295,6 +299,7 @@ if processed_file:
         else:
             # Convert the returned base64 PCM data to a WAV byte stream
             audio_bytes = pcm_to_wav(tts_result_base64, TTS_SAMPLE_RATE)
+            st.success("Audio playback initialized.")
             
         st.audio(audio_bytes, format='audio/wav')
         
