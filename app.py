@@ -10,6 +10,7 @@ import io
 import wave
 import struct
 import random
+import requests # Added for making HTTP API calls
 
 # --- Set Up Gemini API Configuration ---
 # Leave apiKey as an empty string; the environment will handle it.
@@ -40,7 +41,7 @@ def load_model_and_metadata():
     block below and ensure your 'models/' folder is deployed.
     """
     
-    st.warning(f"🚨 **Simulation Mode:** Model files are not included. Prediction and severity results are simulated. TTS functionality is live.")
+    st.warning(f"🚨 **Simulation Mode:** Model files are not included. Prediction and severity results are simulated. TTS functionality is now using the live API structure.")
 
     # --- SIMULATION VALUES ---
     time.sleep(1) 
@@ -165,7 +166,7 @@ def pcm_to_wav(pcm_data_base64, sample_rate):
 
 
 def generate_tts_audio(text_to_speak):
-    """Calls the Gemini TTS API and returns the WAV bytes."""
+    """Calls the Gemini TTS API using requests and returns the base64 audio data with exponential backoff."""
     headers = {'Content-Type': 'application/json'}
     payload = {
         "contents": [{
@@ -184,28 +185,43 @@ def generate_tts_audio(text_to_speak):
     
     url = f"{TTS_API_URL}?key={API_KEY}"
     
-    try:
-        # Note: Using st.experimental_connection or native Python requests 
-        # is usually better for external APIs in Streamlit, but sticking 
-        # to the provided fetch structure for consistency.
-        # In a real Streamlit app, you would use a dedicated library like 'requests'.
-        
-        # Since 'fetch' is not directly available in Python, we simulate 
-        # the API call outcome or assume a working connection mechanism.
-        # For simplicity and environment safety, we will mock the response 
-        # structure, as direct fetch calls without robust libraries are complex.
-        
-        # --- MOCK TTS API RESPONSE FOR SINGLE-FILE CONTEXT ---
-        st.info("TTS API call is mocked to avoid external dependency issues. A generic WAV file will play.")
-        # Load a small, silent/placeholder WAV file in base64
-        # (A full TTS implementation requires a working backend connection)
-        
-        # This is a placeholder/mock implementation of the API call:
-        return None # Return None to trigger fallback in UI
-        
-    except Exception:
-        # st.error(f"TTS API Error: {e}. Cannot generate voice output.")
-        return None # Return None on failure
+    # Implementing Exponential Backoff
+    max_retries = 5
+    base_delay = 1
+    
+    for attempt in range(max_retries):
+        try:
+            # Synchronous API call
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+            
+            result = response.json()
+            candidate = result.get('candidates', [{}])[0]
+            part = candidate.get('content', {}).get('parts', [{}])[0]
+            audio_data = part.get('inlineData', {}).get('data')
+            mime_type = part.get('inlineData', {}).get('mimeType')
+
+            # Check for correct audio format (audio/L16)
+            if audio_data and mime_type and mime_type.startswith("audio/L16"):
+                return audio_data
+            else:
+                # Log error but proceed to next retry/fail if structure is wrong
+                if attempt == max_retries - 1: st.error("TTS API response missing expected audio data.")
+                return None
+            
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                # Retry only on transient errors (e.g., 429, 500, 503)
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                time.sleep(delay)
+            else:
+                st.error(f"TTS API request failed after {max_retries} attempts. Cannot generate voice output.")
+                return None
+        except Exception as e:
+            # General error during processing
+            st.error(f"An unexpected error occurred during TTS processing: {e}")
+            return None
+    return None
 
 # --- Streamlit UI ---
 
@@ -257,21 +273,18 @@ if processed_file:
     st.markdown(f"**Text Analysis:** {analysis_text}")
     
     # 2. Generate and Play Audio
-    # In a real environment, you would call:
-    # tts_result_base64 = generate_tts_audio(analysis_text) 
+    with st.spinner("Generating voice output..."):
+        tts_result_base64 = generate_tts_audio(analysis_text) 
     
-    # Due to the complexity of robust API calls in single-file Streamlit, 
-    # we will use a fallback for audio playback, but the TTS structure is in place.
-    
-    st.warning("🎤 Audio Playback is currently simulated/unavailable due to external API dependency constraints in this environment.")
-    
-    # if tts_result_base64:
-    #     try:
-    #         # Convert the returned base64 PCM data to a WAV byte stream
-    #         wav_bytes = pcm_to_wav(tts_result_base64, TTS_SAMPLE_RATE)
-    #         st.audio(wav_bytes, format='audio/wav')
-    #     except Exception as e:
-    #         st.error(f"Error converting or playing audio: {e}")
+    if tts_result_base64:
+        try:
+            # Convert the returned base64 PCM data to a WAV byte stream
+            wav_bytes = pcm_to_wav(tts_result_base64, TTS_SAMPLE_RATE)
+            st.audio(wav_bytes, format='audio/wav')
+        except Exception as e:
+            st.error(f"Error converting or playing audio: {e}")
+    else:
+        st.warning("Could not generate voice output. Check API connection and logs for details.")
     
     st.markdown("---")
     
