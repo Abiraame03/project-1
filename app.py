@@ -11,7 +11,7 @@ import os
 # --- I. Configuration and Setup ---
 
 # Define Paths (MUST match files in your local 'models/' directory)
-MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5"
+MODEL_PATH = "models/mobilenetv2_bilstm_final.h5"
 CLASS_MAP_PATH = "models/class_indices_best.pkl"
 THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
@@ -115,7 +115,7 @@ def predict_image(image_input, ml_model, inv_map, threshold):
         prob = random.uniform(0.05, 0.95) 
     
     # 2. Determine Class based on Confidence Score
-    # The binary classification remains based on the pre-trained model's optimal threshold (0.44 by default)
+    # The binary classification remains based on the user-adjusted threshold.
     label = 1 if prob > threshold else 0
     class_name = inv_map[label]
 
@@ -129,12 +129,12 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     elif prob_percent <= 30:
         severity_tag = "Mild Risk"
         severity_range = "11-30%"
-    elif prob_percent <= 55:
+    elif prob_percent <= 51:
         severity_tag = "Moderate Risk"
-        severity_range = "31-55%"
+        severity_range = "31-51%"
     else: # prob_percent > 70
         severity_tag = "Severe Risk"
-        severity_range = "55-100%"
+        severity_range = "52-100%"
 
     severity = f"{severity_tag} ({severity_range})"
     return class_name, float(prob), severity
@@ -192,8 +192,15 @@ def generate_handwriting_features(severity_tag):
 
 # Add the adjustable threshold to the sidebar
 st.sidebar.header("Advanced Prediction Settings")
+st.sidebar.markdown("""
+    **❗️ CRITICAL ACTION: CORRECTING MISCLASSIFICATIONS**
+    The core ML model's confidence score cannot be changed. To correct a prediction for a specific image, **you must adjust the threshold slider** below.
+""")
 st.sidebar.warning(
-    "💡 **Prediction Correction:** If a dyslexic sample is predicted as 'Normal' (False Negative), **LOWER** the threshold (e.g., to 0.35). If a normal sample is predicted as 'Dyslexic' (False Positive), **RAISE** the threshold (e.g., to 0.60)."
+    "**FIXING FALSE NEGATIVES (Dyslexic Classified as Normal):** If the prediction is wrong, **LOWER** the threshold (e.g., to 0.35) until the Confidence Score is higher than the Threshold. "
+)
+st.sidebar.error(
+    "**FIXING FALSE POSITIVES (Normal Classified as Dyslexic):** If the prediction is wrong, **RAISE** the threshold (e.g., to 0.60) until the Confidence Score is lower than the Threshold."
 )
 current_threshold = st.sidebar.slider(
     "Prediction Threshold (Probability Cutoff)", 
