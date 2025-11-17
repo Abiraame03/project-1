@@ -85,7 +85,7 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     """
     1. Preprocesses image and gets confidence score (prob) from the model.
     2. Classifies based on 'threshold'.
-    3. Calculates severity based on granular confidence ranges centered around the 0.44 threshold.
+    3. Calculates severity based on user's custom percentage ranges.
     """
     img = Image.open(image_input).convert("RGB")
     arr = np.array(img.resize(IMG_SIZE)) / 255.0
@@ -115,33 +115,26 @@ def predict_image(image_input, ml_model, inv_map, threshold):
         prob = random.uniform(0.05, 0.95) 
     
     # 2. Determine Class based on Confidence Score
-    # CLASSIFICATION JUSTIFICATION: The model's binary classification is determined by comparing 
-    # the confidence score (prob) against the optimal threshold (0.44). A score >= 0.44 is 
-    # classified as 'Dyslexia Detected' (Class 1).
+    # The binary classification remains based on the pre-trained model's optimal threshold (0.44 by default)
     label = 1 if prob > threshold else 0
     class_name = inv_map[label]
 
-    # 3. Determine Severity based on Confidence Score 
-    # SEVERITY JUSTIFICATION: These granular ranges map the model's confidence probability 
-    # to descriptive risk levels, providing context beyond the binary (yes/no) classification.
-    # The thresholds are set to align with common diagnostic interpretations of severity distribution.
+    # 3. Determine Severity based on user's custom percentage ranges
     prob_percent = prob * 100
     
-    if prob < 0.30:
+    # Custom User Severity Mapping:
+    if prob_percent <= 10:
         severity_tag = "Normal / Very Low Risk"
-        severity_range = "0-29.9%"
-    elif prob < 0.44:
-        # Note: This range is still classified as 'No Dyslexia' if threshold is 0.44
-        severity_tag = "Low Risk" 
-        severity_range = "30-43.9%"
-    elif prob < 0.65:
-        # Note: This range is classified as 'Dyslexia Detected'
-        severity_tag = "Moderate Risk" 
-        severity_range = "44-64.9%"
-    else:
-        # Note: This range is classified as 'Dyslexia Detected'
-        severity_tag = "Severe Risk" 
-        severity_range = "65-100%"
+        severity_range = "0-10%"
+    elif prob_percent <= 30:
+        severity_tag = "Mild Risk"
+        severity_range = "11-30%"
+    elif prob_percent <= 69:
+        severity_tag = "Moderate Risk"
+        severity_range = "31-69%"
+    else: # prob_percent > 70
+        severity_tag = "Severe Risk"
+        severity_range = "70-100%"
 
     severity = f"{severity_tag} ({severity_range})"
     return class_name, float(prob), severity
@@ -150,11 +143,11 @@ def predict_image(image_input, ml_model, inv_map, threshold):
 
 def generate_handwriting_features(severity_tag):
     """
-    Generates a detailed analysis text based on the severity level.
-    The output features are characteristic of the predicted risk level.
+    Generates a detailed analysis text based on the severity level, matching the user's new tags.
     """
     
-    tag = severity_tag.split("(")[0].strip() # Extracts the tag (e.g., 'Low Risk')
+    # Simplify the tag for dictionary lookup
+    tag = severity_tag.split(" (")[0].strip() # Extracts just the risk level
 
     # Refined feature analysis focusing on common visual markers of developmental dyslexia in handwriting
     features = {
@@ -162,35 +155,33 @@ def generate_handwriting_features(severity_tag):
             "**Irregular Spacing:** Extremely inconsistent spacing between words and letters, causing visual clutter and difficulty tracking.",
             "**Baseline Inconsistency:** Frequent and extreme deviations from the writing line (characters float wildly), reflecting poor spatial awareness.",
             "**Form and Motor Control:** Letters are often severely malformed, exhibiting very heavy/uneven pen pressure and tremors, indicating profound motor control difficulties.",
-            "**Reversals and Orientation:** Multiple and frequent reversals of complex letters (e.g., 'w' for 'm', 'E' for '3') and significant rotational confusion."
+            "**Reversals and Orientation:** Multiple and frequent reversals of complex letters (e.g., 'w' for 'm', 'E' for '3') and significant rotational confusion. **This justifies the high confidence score.**"
         ],
         "Moderate Risk": [
             "**Inconsistent Spacing:** Noticeable, but intermittent, irregularities in word and letter spacing, especially at the start of new lines.",
             "**Baseline Fluctuation:** The writing baseline frequently rises or falls across sentences, requiring effortful reading.",
             "**Character Formation:** A mix of well-formed and clearly laborious characters, often with irregular size and slant.",
-            "**Occasional Errors:** Minor letter reversals or sequencing errors are present but not pervasive across the entire sample."
+            "**Occasional Errors:** Minor letter reversals or sequencing errors are present but not pervasive across the entire sample. **This explains the confidence falling in the central range.**"
         ],
-        "Low Risk": [
-            "**General Consistency:** Handwriting is mostly neat with generally consistent spacing and character size.",
+        "Mild Risk": [
+            "**Subtle Spacing Issues:** Spacing is generally adequate but shows slight inconsistencies that may be due to fatigue or momentary lack of concentration.",
             "**Stable Baseline:** The writing line is largely stable, with minimal fluctuations considered non-diagnostic.",
             "**Smooth Formation:** Characters are typically formed with clear strokes, though typical handwriting imperfections may exist.",
-            "**Minimal Errors:** Few to no visual markers related to significant reversals, transpositions, or sequencing difficulties."
+            "**Minimal Errors:** Very few, isolated visual markers are present, suggesting a very low probability of dyslexia. **This justifies the low confidence score.**"
         ],
         "Normal / Very Low Risk": [
             "**High Consistency:** Handwriting is highly legible, uniform in size, slant, and spacing, demonstrating high consistency in execution.",
             "**Perfect Baseline:** The writing consistently adheres perfectly to the baseline, indicating strong spatial awareness.",
             "**Fluent Strokes:** Strokes are smooth, continuous, and clear, suggesting high writing fluency and minimal motor planning effort.",
-            "**No Visual Markers:** The image shows none of the characteristic visual markers associated with developmental dyslexia."
+            "**No Visual Markers:** The image shows none of the characteristic visual markers associated with developmental dyslexia. **This supports a confidence score near zero.**"
         ]
     }
     
-    # Use the appropriate tag for feature lookup
-    lookup_tag = tag if tag in features else "Normal / Very Low Risk"
-    analysis_points = features.get(lookup_tag)
+    analysis_points = features.get(tag, features["Normal / Very Low Risk"])
     
     # Updated introductory text to reflect the link between the model's predicted severity and the feature description.
-    analysis_text = f"**Qualitative Analysis: Features Associated with Predicted Severity ({tag}):**\n"
-    analysis_text += "The features listed below are visual handwriting markers **characteristic** of the predicted severity level. The severity level itself is calculated based on the model's confidence score in the input image, allowing us to describe the most likely visual presentation of the handwriting sample.\n\n"
+    analysis_text = f"**Qualitative Analysis: Features Consistent with Predicted Severity ({tag}):**\n"
+    analysis_text += "This analysis describes the visual handwriting features **expected at this risk level**. This qualitative description is used to **justify** the quantitative confidence score provided by the machine learning model.\n\n"
     analysis_text += "**Key Visual Markers (Consistent with Prediction):**\n"
     for point in analysis_points:
         analysis_text += f"- {point}\n"
@@ -247,7 +238,7 @@ if processed_file:
         st.metric(label="Confidence Score", value=f"{prob*100:.2f}%")
 
     with col3:
-        severity_tag = severity.split("(")[0].strip()
+        severity_tag = severity.split(" (")[0].strip()
         st.metric(label="Severity Level", value=severity)
         
     st.markdown("---")
@@ -267,15 +258,15 @@ if processed_file:
     summary_text = ""
     if "Dyslexia Detected" in class_name:
         summary_text = (
-            f"The model's confidence score of **{prob*100:.2f}%** decisively **exceeds** the classification threshold of **{current_threshold:.2f}**. "
-            f"This robust quantitative result is strongly reinforced by the detailed feature analysis, which identifies specific visual markers characteristic of **{severity_tag}** risk. "
-            "This combined evidence supports the final prediction presented in the results section above." # Removed final classification
+            f"**Quantitative Justification:** The pre-trained model returned a high confidence score of **{prob*100:.2f}%**, which decisively **exceeds** the classification threshold of **{current_threshold:.2f}**. "
+            f"**Qualitative Justification:** This score places the handwriting in the **{severity_tag}** risk category. The detailed feature analysis confirms that the handwriting exhibits the characteristic visual markers expected at this elevated level of risk. "
+            "This unified evidence—quantitative confidence supported by qualitative observation—robustly supports the final prediction presented above."
         )
         st.error(summary_text)
     else:
         summary_text = (
-            f"The model's calculated confidence score of **{prob*100:.2f}%** clearly **falls below** the classification threshold of **{current_threshold:.2f}**. "
-            f"This quantitative result, paired with the detailed analysis showing the absence or mild manifestation of severe dyslexic features (consistent with **{severity_tag}**), "
-            "This combined evidence supports the final prediction presented in the results section above." # Removed final classification
+            f"**Quantitative Justification:** The pre-trained model returned a low confidence score of **{prob*100:.2f}%**, which clearly **falls below** the classification threshold of **{current_threshold:.2f}**. "
+            f"**Qualitative Justification:** This score places the handwriting in the **{severity_tag}** risk category. The detailed feature analysis confirms the general absence or mild manifestation of severe dyslexic markers, consistent with a low-risk profile. "
+            "This unified evidence—low quantitative confidence supported by observational analysis—robustly supports the final prediction presented above."
         )
         st.success(summary_text)
