@@ -1,76 +1,84 @@
+# ================================================================
+# 1️⃣ IMPORTS
+# ================================================================
 import streamlit as st
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 from PIL import Image
 import pickle
 import json
-import requests
-from io import BytesIO
 
-# ==============================
-# 1️⃣ Config: Model Paths
-# ==============================
-MODEL_URL = "https://github.com/Abiraame03/project-1/raw/main/models/mobilenetv2_bilstm_final.h5"
-CLASS_MAP_URL = "https://github.com/Abiraame03/project-1/raw/main/models/class_indices.pkl"
-THRESHOLD_URL = "https://github.com/Abiraame03/project-1/raw/main/models/best_threshold.json"
+# ================================================================
+# 2️⃣ APP TITLE
+# ================================================================
+st.set_page_config(page_title="Dyslexia Detection", layout="centered")
+st.title("🧠 Dyslexia Detection & Severity Prediction")
 
-IMG_SIZE = (160, 160)
-
+# ================================================================
+# 3️⃣ LOAD MODEL & THRESHOLD
+# ================================================================
 @st.cache_resource
 def load_model_files():
+    MODEL_PATH = "models/mobilenetv2_bilstm_final.h5"  # already in repo
+    CLASS_MAP_PATH = "models/class_indices.pkl"        # already in repo
+    THRESHOLD_PATH = "models/best_threshold.json"      # already in repo
+
     # Load model
-    model_path = tf.keras.utils.get_file("mobilenetv2_bilstm_final.h5", MODEL_URL)
-    model = tf.keras.models.load_model(model_path)
-    
-    # Load class map
-    class_map_path = tf.keras.utils.get_file("class_indices.pkl", CLASS_MAP_URL)
-    with open(class_map_path, "rb") as f:
+    model = tf.keras.models.load_model(MODEL_PATH)
+
+    # Load class mapping
+    with open(CLASS_MAP_PATH, "rb") as f:
         class_indices = pickle.load(f)
-    inv_map = {v:k for k,v in class_indices.items()}
-    
+    inv_map = {v: k for k, v in class_indices.items()}
+
     # Load threshold
-    threshold_path = tf.keras.utils.get_file("best_threshold.json", THRESHOLD_URL)
-    with open(threshold_path, "r") as f:
-        THRESHOLD = json.load(f)["threshold"]
-    
-    return model, inv_map, THRESHOLD
+    with open(THRESHOLD_PATH, "r") as f:
+        threshold = json.load(f)["threshold"]
+
+    return model, inv_map, threshold
 
 model, inv_map, THRESHOLD = load_model_files()
 
-# ==============================
-# 2️⃣ Streamlit UI
-# ==============================
-st.title("📝 Dyslexia Detection from Handwriting/Image")
+IMG_SIZE = (160, 160)
 
-uploaded_file = st.file_uploader("Upload handwriting image", type=["jpg", "jpeg", "png"])
-
-if uploaded_file:
-    img = Image.open(uploaded_file).convert("RGB")
-    st.image(img, caption="Uploaded Image", use_column_width=True)
-    
-    # Preprocess image
+# ================================================================
+# 4️⃣ PREDICTION FUNCTION
+# ================================================================
+def predict_image(image):
+    img = Image.open(image).convert("RGB")
     img_resized = img.resize(IMG_SIZE)
-    img_array = np.array(img_resized) / 255.0
-    img_array = np.expand_dims(img_array, axis=0)
-    
-    # Predict
-    prob = model.predict(img_array)[0][0]
-    label = 1 if prob >= THRESHOLD else 0
+
+    arr = np.array(img_resized) / 255.0
+    arr = np.expand_dims(arr, axis=0)
+
+    prob = float(model.predict(arr)[0][0])
+    label = 1 if prob > THRESHOLD else 0
     class_name = inv_map[label]
-    confidence = float(prob) * 100
-    
-    # Severity levels
-    if confidence < 5:
+
+    # Severity calculation
+    if prob <= 0.05:
         severity = "Normal (0)"
-    elif 5 <= confidence < 30:
+    elif 0.05 < prob <= 0.3:
         severity = "Mild (5-30)"
-    elif 30 <= confidence <= 70:
+    elif 0.3 < prob <= 0.7:
         severity = "Moderate (30-70)"
     else:
         severity = "Severe (>70)"
-    
-    # Display results
-    st.subheader("Prediction Results")
+
+    return class_name, prob, severity
+
+# ================================================================
+# 5️⃣ STREAMLIT UI
+# ================================================================
+uploaded_file = st.file_uploader("Upload an image of the child for prediction", type=["jpg", "jpeg", "png"])
+
+if uploaded_file:
+    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+    st.write("Predicting...")
+
+    class_name, prob, severity = predict_image(uploaded_file)
+
+    st.subheader("Prediction Result")
     st.write(f"**Class:** {class_name}")
-    st.write(f"**Confidence:** {confidence:.2f}%")
+    st.write(f"**Confidence:** {prob*100:.2f}%")
     st.write(f"**Severity:** {severity}")
