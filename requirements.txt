@@ -1,11 +1,21 @@
-# Streamlit & Core
-streamlit==1.26.0
-tensorflow==2.20.0
-numpy>=1.26.0,<1.27.0
-pillow>=9.5.0,<10.0
+# Streamlit version compatible with TensorFlow 2.20 and Python 3.13
+streamlit==1.30.0
 
-# OpenCV for camera access
-opencv-python-headless>=4.7.0,<4.8.0
+# TensorFlow core
+tensorflow==2.20.0
+
+# Numerical computation
+numpy>=1.26.0,<1.27.0
+
+# Image processing
+pillow>=9.5,<10.0
+opencv-python-headless>=4.10.0,<4.12.0
 
 # Text-to-speech
 pyttsx3==2.90
+
+# For nicer logging in Streamlit
+rich==14.2.0
+markdown-it-py==4.0.0
+mdurl==0.1.2
+pygments==2.19.2
