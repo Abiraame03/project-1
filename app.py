@@ -129,12 +129,12 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     elif prob_percent <= 30:
         severity_tag = "Mild Risk"
         severity_range = "11-30%"
-    elif prob_percent <= 69:
+    elif prob_percent <= 55:
         severity_tag = "Moderate Risk"
-        severity_range = "31-69%"
+        severity_range = "31-55%"
     else: # prob_percent > 70
         severity_tag = "Severe Risk"
-        severity_range = "70-100%"
+        severity_range = "55-100%"
 
     severity = f"{severity_tag} ({severity_range})"
     return class_name, float(prob), severity
