@@ -18,7 +18,7 @@ DEFAULT_THRESHOLD = 0.5
 DEFAULT_INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
-st.header("🧠 Dyslexia Detection & Severity Prediction")
+st.header("Dyslexia Detection & Severity Prediction")
 st.markdown("Use your device camera or upload a behavioral image (e.g., drawing or writing sample) for analysis.")
 
 # --- Model Loading Structure (Prepared for Real Files) ---
@@ -59,7 +59,7 @@ def load_model_and_metadata():
             pass # Fall through to simulation mode
     
     # --- SIMULATION FALLBACK (Used if files are missing or loading fails) ---
-    st.warning(f"🚨 **Simulation Mode:** Model files are not included. Prediction and severity results are simulated.")
+    st.warning(f"🚨Prediction and severity results are simulated.")
     return ml_model, inv_map, threshold
 
 model, INV_MAP, THRESHOLD = load_model_and_metadata()
