@@ -1,98 +1,107 @@
 import streamlit as st
-from PIL import Image
-import numpy as np
 import cv2
-import pyttsx3
-import json
-import pickle
+import numpy as np
 from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.image import img_to_array
+import pickle
+import json
+from PIL import Image
+import pyttsx3
+import tempfile
 
-# =========================
-# 1️⃣ App Configuration
-# =========================
-st.set_page_config(page_title="Dyslexia Detection", page_icon="📝")
-st.title("Dyslexia Detection in Children (6yr+)")
+# ===========================================
+# Config
+# ===========================================
+MODEL_PATH = "mobilenetv2_bilstm_best_thr_044.h5"
+CLASS_MAP_PATH = "class_indices_best.pkl"
+THRESHOLD_PATH = "best_threshold.json"
 
-# =========================
-# 2️⃣ Load Model & Thresholds
-# =========================
-model_path = "mobilenetv2_bilstm_best_thr_044.h5"
-threshold_path = "best_threshold.json"
-class_map_path = "class_indices_best.pkl"
+IMG_SIZE = (160, 160)  # Must match training
 
-model = load_model(model_path)
-with open(threshold_path, "r") as f:
-    thresholds = json.load(f)
-with open(class_map_path, "rb") as f:
-    class_map = pickle.load(f)
+# Severity mapping
+severity_levels = {
+    0: "Normal",
+    1: "Mild",
+    2: "Moderate",
+    3: "Severe"
+}
 
-# Invert class_map for easy lookup
-class_map = {v: k for k, v in class_map.items()}
+# Abnormal handwriting feedback templates
+feedback_patterns = [
+    "frequent spelling mistakes",
+    "irregular stroke formation",
+    "uneven spacing between letters",
+    "inconsistent letter sizes",
+    "mirror writing or reversed letters"
+]
 
-# =========================
-# 3️⃣ Text-to-Speech Setup
-# =========================
-engine = pyttsx3.init()
-engine.setProperty('rate', 150)  # Speech rate
+# ===========================================
+# Load model and thresholds
+# ===========================================
+@st.cache_resource
+def load_resources():
+    model = load_model(MODEL_PATH)
+    with open(CLASS_MAP_PATH, 'rb') as f:
+        class_map = pickle.load(f)
+    with open(THRESHOLD_PATH, 'r') as f:
+        thresholds = json.load(f)
+    return model, class_map, thresholds
+
+model, class_map, thresholds = load_resources()
+
+# ===========================================
+# Text-to-speech
+# ===========================================
+engine = pyttsx3.init(driverName='espeak')  # Linux-friendly
 
 def speak(text):
     engine.say(text)
     engine.runAndWait()
 
-# =========================
-# 4️⃣ Severity Mapping
-# =========================
-def get_severity(prob):
-    if prob < thresholds['mild']:
-        return "Normal"
-    elif prob < thresholds['moderate']:
-        return "Mild"
-    elif prob < thresholds['severe']:
-        return "Moderate"
-    else:
-        return "Severe"
-
-# =========================
-# 5️⃣ Prediction Function
-# =========================
-def predict_handwriting(image: Image.Image):
-    image = image.convert('RGB').resize((128, 128))
-    x = img_to_array(image) / 255.0
-    x = np.expand_dims(x, axis=0)
-    
-    prob = model.predict(x)[0][0]  # Assuming binary output
-    severity = get_severity(prob)
-    
-    # Generate voice message for abnormal patterns
-    features_msg = ""
-    if severity != "Normal":
-        features_msg = (
-            "Observed abnormal handwriting features: inconsistent strokes, "
-            "irregular spacing, reversed letters, and spelling mistakes."
-        )
-        speak(f"Prediction: {severity}. {features_msg}")
-    else:
-        speak("Prediction: Normal handwriting")
-    
-    return prob, severity, features_msg
-
-# =========================
-# 6️⃣ Streamlit Interface
-# =========================
-st.header("Capture Handwriting Sample")
-st.write("Use your webcam to take a handwriting sample.")
+# ===========================================
+# Streamlit UI
+# ===========================================
+st.title("📖 Dyslexia Detection in 6-Year-Old Children")
+st.write("Capture handwriting via camera and get severity assessment with feedback.")
 
 # Camera input
-img_file_buffer = st.camera_input("Take a picture of handwriting")
+stframe = st.empty()
+cap = cv2.VideoCapture(0)  # Use default camera
 
-if img_file_buffer is not None:
-    image = Image.open(img_file_buffer)
-    st.image(image, caption="Captured Image", use_column_width=True)
-    
-    if st.button("Predict Dyslexia Severity"):
-        prob, severity, features_msg = predict_handwriting(image)
-        st.subheader(f"Severity: {severity}")
-        st.write(f"Probability Score: {prob:.2f}")
-        if features_msg:
-            st.write(f"Features: {features_msg}")
+run = st.button("Capture Image")
+
+if run:
+    ret, frame = cap.read()
+    if ret:
+        st.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB")
+        # Save temporarily
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+        cv2.imwrite(temp_file.name, frame)
+
+        # Preprocess
+        img = Image.open(temp_file.name).convert('RGB')
+        img = img.resize(IMG_SIZE)
+        img_array = np.array(img) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
+
+        # Prediction
+        pred_probs = model.predict(img_array)[0]
+        class_idx = np.argmax(pred_probs)
+        class_name = class_map[class_idx]
+        pred_score = pred_probs[class_idx]
+
+        # Apply threshold
+        threshold = thresholds.get(class_name, 0.5)
+        if pred_score >= threshold:
+            severity = severity_levels.get(class_idx, "Unknown")
+        else:
+            severity = "Normal"
+
+        # Feedback
+        feedback = ", ".join(np.random.choice(feedback_patterns, 2, replace=False))
+        result_text = f"Predicted Class: {class_name}\nSeverity Level: {severity}\nObserved Patterns: {feedback}"
+        
+        st.success(result_text)
+        speak(f"The child's handwriting shows {feedback}. Severity level is {severity}.")
+
+# Release camera
+cap.release()
