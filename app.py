@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 
 DYSLEXIA_MODEL_PATH = "/content/drive/MyDrive/Hybrid_BiLSTM_model/mobilenetv2_bilstm_best_thr_044.h5"
 THRESHOLD_PATH      = "/content/drive/MyDrive/Hybrid_BiLSTM_model/best_threshold.json"
-DYSLEXIA_CLASS_MAP  = "/content/drive/MyDrive/Hybrid_BiLSTM_model/class_indices.pkl"
+DYSLEXIA_CLASS_MAP  = "/content/drive/MyDrive/Hybrid_BiLSTM_model/class_indices_best.pkl"
 
 FEATURE_MODEL_PATH  = "/content/drive/MyDrive/DL-3 Model_TUNED_version/BEST_TUNED_MODEL.keras"
 FEATURE_CLASS_MAP   = "/content/drive/MyDrive/DL-3 Model/class_indices.pkl"
