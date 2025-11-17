@@ -1,9 +1,9 @@
+streamlit>=1.20.0
 tensorflow==2.15.0
 numpy
-opencv-python
 Pillow
+opencv-python-headless
 scikit-learn
 matplotlib
+gTTS
 pickle5
-gunicorn
-streamlit
