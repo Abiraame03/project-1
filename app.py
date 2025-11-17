@@ -41,7 +41,7 @@ def load_model_and_metadata():
     block below and ensure your 'models/' folder is deployed.
     """
     
-    st.warning(f"🚨 **Simulation Mode:** Model files are not included. Prediction and severity results are simulated. TTS functionality is now using the live API structure.")
+    st.warning(f"🚨 **Simulation Mode:** Model files are not included. Prediction and severity results are simulated. TTS functionality is configured for live API calls with a fallback.")
 
     # --- SIMULATION VALUES ---
     time.sleep(1) 
@@ -164,6 +164,9 @@ def pcm_to_wav(pcm_data_base64, sample_rate):
         wf.writeframes(pcm_data)
     return wav_io.getvalue()
 
+# Base64 encoded tiny silent WAV file (for fallback)
+# 1 channel, 16bit, 24000Hz, 0.1 seconds of silence
+SILENT_WAV_BASE64 = "UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAABKAAACABAAZGF0YAAAAAAA"
 
 def generate_tts_audio(text_to_speak):
     """Calls the Gemini TTS API using requests and returns the base64 audio data with exponential backoff."""
@@ -192,7 +195,7 @@ def generate_tts_audio(text_to_speak):
     for attempt in range(max_retries):
         try:
             # Synchronous API call
-            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10) # Added timeout
             response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
             
             result = response.json()
@@ -203,25 +206,30 @@ def generate_tts_audio(text_to_speak):
 
             # Check for correct audio format (audio/L16)
             if audio_data and mime_type and mime_type.startswith("audio/L16"):
+                st.success("Voice output generated successfully via API.")
                 return audio_data
             else:
-                # Log error but proceed to next retry/fail if structure is wrong
+                # Log error if structure is wrong
                 if attempt == max_retries - 1: st.error("TTS API response missing expected audio data.")
                 return None
             
         except requests.exceptions.RequestException as e:
             if attempt < max_retries - 1:
-                # Retry only on transient errors (e.g., 429, 500, 503)
+                # Retry only on transient errors (e.g., 429, 500, 503, timeout)
                 delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
                 time.sleep(delay)
             else:
-                st.error(f"TTS API request failed after {max_retries} attempts. Cannot generate voice output.")
-                return None
+                st.error(f"TTS API request failed after {max_retries} attempts: {e}. Falling back to silent audio.")
+                # Fallback on final failure
+                break
         except Exception as e:
-            # General error during processing
-            st.error(f"An unexpected error occurred during TTS processing: {e}")
-            return None
-    return None
+            # General error during processing (JSON parsing, etc.)
+            st.error(f"An unexpected error occurred during TTS processing: {e}. Falling back to silent audio.")
+            break
+    
+    # --- FALLBACK MECHANISM ---
+    # Convert the silent WAV base64 string to raw bytes for st.audio
+    return SILENT_WAV_BASE64
 
 # --- Streamlit UI ---
 
@@ -273,18 +281,25 @@ if processed_file:
     st.markdown(f"**Text Analysis:** {analysis_text}")
     
     # 2. Generate and Play Audio
-    with st.spinner("Generating voice output..."):
+    with st.spinner("Attempting to generate voice output..."):
         tts_result_base64 = generate_tts_audio(analysis_text) 
     
-    if tts_result_base64:
-        try:
+    try:
+        # Check if the result is the silent fallback
+        is_fallback = tts_result_base64 == SILENT_WAV_BASE64
+        
+        if is_fallback:
+            # Convert silent WAV base64 string directly to WAV bytes
+            audio_bytes = base64.b64decode(tts_result_base64)
+            st.warning("🎤 Voice output failed due to network error. Playing silent placeholder audio.")
+        else:
             # Convert the returned base64 PCM data to a WAV byte stream
-            wav_bytes = pcm_to_wav(tts_result_base64, TTS_SAMPLE_RATE)
-            st.audio(wav_bytes, format='audio/wav')
-        except Exception as e:
-            st.error(f"Error converting or playing audio: {e}")
-    else:
-        st.warning("Could not generate voice output. Check API connection and logs for details.")
+            audio_bytes = pcm_to_wav(tts_result_base64, TTS_SAMPLE_RATE)
+            
+        st.audio(audio_bytes, format='audio/wav')
+        
+    except Exception as e:
+        st.error(f"Error converting or playing audio: {e}")
     
     st.markdown("---")
     
