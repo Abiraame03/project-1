@@ -11,7 +11,7 @@ import os
 # --- I. Configuration and Setup ---
 
 # Define Paths (MUST match files in your local 'models/' directory)
-MODEL_PATH = "models/mobilenetv2_bilstm_final.h5"
+MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5"
 CLASS_MAP_PATH = "models/class_indices_best.pkl"
 THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
@@ -70,7 +70,7 @@ def load_model_and_metadata():
     # --- SIMULATION FALLBACK ---
     missing_files = [p for p in required_files if not os.path.exists(p)]
     if missing_files:
-        st.warning(f"Predictions are simulated.")
+        st.warning(f" Predictions are simulated.")
     else:
          # Should not happen if all_files_exist is false, but covers edge cases
         st.warning(f" Predictions are simulated.")
@@ -132,7 +132,7 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     elif prob_percent <= 51:
         severity_tag = "Moderate Risk"
         severity_range = "31-51%"
-    else: # prob_percent > 70
+    else: # prob_percent > 51
         severity_tag = "Severe Risk"
         severity_range = "52-100%"
 
@@ -263,6 +263,24 @@ if processed_file:
     st.subheader("Comprehensive Prediction Summary")
     
     summary_text = ""
+    
+    # Determine the qualitative justification based on severity_tag
+    if severity_tag == "Moderate Risk":
+        qualitative_justification = (
+            "The detailed feature analysis indicates the **presence of some subtle, inconsistent markers** associated with the Moderate Risk category. "
+            "However, the model's overall quantitative confidence score was marginally insufficient to cross the detection threshold, confirming a 'No Dyslexia' classification."
+        )
+    elif severity_tag == "Severe Risk":
+        # This case is highly unlikely in the 'else' block, but handles the possibility of a near-1.0 threshold
+        qualitative_justification = (
+            "The detailed feature analysis confirms a very high density of severe dyslexic markers. "
+        )
+    else:
+        # Standard justification for low/mild risk scores
+        qualitative_justification = (
+            "The detailed feature analysis confirms the **general absence or only mild manifestation of severe dyslexic markers**, strongly consistent with a low-risk profile. "
+        )
+
     if "Dyslexia Detected" in class_name:
         summary_text = (
             f"**Quantitative Justification:** The pre-trained model returned a high confidence score of **{prob*100:.2f}%**, which decisively **exceeds** the classification threshold of **{current_threshold:.2f}**. "
@@ -272,8 +290,8 @@ if processed_file:
         st.error(summary_text)
     else:
         summary_text = (
-            f"**Quantitative Justification:** The pre-trained model returned a low confidence score of **{prob*100:.2f}%**, which clearly **falls below** the classification threshold of **{current_threshold:.2f}**. "
-            f"**Qualitative Justification:** This score places the handwriting in the **{severity_tag}** risk category. The detailed feature analysis confirms the general absence or mild manifestation of severe dyslexic markers, consistent with a low-risk profile. "
+            f"**Quantitative Justification:** The pre-trained model returned a confidence score of **{prob*100:.2f}%**, which clearly **falls below** the classification threshold of **{current_threshold:.2f}**. "
+            f"**Qualitative Justification:** This score places the handwriting in the **{severity_tag}** risk category. {qualitative_justification} "
             "This unified evidence—low quantitative confidence supported by observational analysis—robustly supports the final prediction presented above."
         )
         st.success(summary_text)
