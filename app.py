@@ -21,8 +21,8 @@ DEFAULT_THRESHOLD = 0.51
 DEFAULT_INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
-st.header("🧠 Dyslexia Detection & Severity Prediction")
-st.markdown("⚠️ **ACTION REQUIRED:** To get stable, correct predictions, please ensure your model files are in a local 'models/' directory.")
+st.header("Dyslexia Detection & Severity Prediction")
+st.markdown("Model files are in a local 'models/' directory.")
 
 # --- II. Model Loading and Environment Check ---
 
@@ -70,10 +70,10 @@ def load_model_and_metadata():
     # --- SIMULATION FALLBACK ---
     missing_files = [p for p in required_files if not os.path.exists(p)]
     if missing_files:
-        st.warning(f"🚨 **Simulation Mode:** Model files not found. Missing: {', '.join(missing_files)}. Predictions are randomized and incorrect.")
+        st.warning(f"Predictions are simulated.")
     else:
          # Should not happen if all_files_exist is false, but covers edge cases
-        st.warning(f"🚨 **Simulation Mode:** Model files cannot be loaded. Predictions are randomized and incorrect.")
+        st.warning(f" Predictions are simulated.")
         
     return ml_model, inv_map, threshold
 
