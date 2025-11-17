@@ -1,20 +1,22 @@
-# Streamlit version compatible with TensorFlow 2.20 and Python 3.13
+# Streamlit for web app
 streamlit==1.30.0
 
-# TensorFlow core
+# TensorFlow for model inference
 tensorflow==2.20.0
 
-# Numerical computation
+# Numpy for data handling
 numpy>=1.26.0,<1.27.0
 
-# Image processing
+# Pillow for image handling
 pillow>=9.5,<10.0
+
+# OpenCV for optional preprocessing
 opencv-python-headless>=4.10.0,<4.12.0
 
-# Text-to-speech
+# Text-to-speech for audio results
 pyttsx3==2.90
 
-# For nicer logging in Streamlit
+# Logging
 rich==14.2.0
 markdown-it-py==4.0.0
 mdurl==0.1.2
