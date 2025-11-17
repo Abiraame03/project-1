@@ -1,50 +1,46 @@
+# =====================================
+# 📦 Streamlit App: Dyslexia Detection
+# =====================================
 import streamlit as st
 import numpy as np
 from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.image import load_img, img_to_array
-import json
-import pickle
+from tensorflow.keras.preprocessing.image import img_to_array, load_img
 
 # --------------------------
-# Load model & config
+# Load model
 # --------------------------
 MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5"
-THRESH_PATH = "models/best_threshold.json"
-CLASS_INDICES_PATH = "models/class_indices_best.pkl"
-
 model = load_model(MODEL_PATH)
 
-with open(THRESH_PATH, "r") as f:
-    best_threshold = json.load(f).get("threshold", 0.5)
-
-with open(CLASS_INDICES_PATH, "rb") as f:
-    class_indices = pickle.load(f)
-
-# Reverse mapping
-idx_to_class = {v: k for k, v in class_indices.items()}
-
 # --------------------------
-# Streamlit UI
+# App UI
 # --------------------------
-st.title("🧠 Dyslexia Detection")
-st.write("Upload an image of text reading or handwriting sample.")
+st.title("🧠 Dyslexia Detection from Image")
+st.write("Upload an image of handwriting or text sample for analysis.")
 
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
 
-    # Preprocess
-    img = load_img(uploaded_file, target_size=(128, 128))
+    # --------------------------
+    # Preprocess image
+    # --------------------------
+    img = load_img(uploaded_file, target_size=(160, 160))
     img_array = img_to_array(img) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
 
-    # Predict
-    pred_prob = float(model.predict(img_array)[0][0])
+    # --------------------------
+    # Prediction
+    # --------------------------
+    pred_prob = float(model.predict(img_array)[0][0])  # binary output
     confidence = pred_prob if pred_prob >= 0 else 1 + pred_prob
-    prediction = "Dyslexic" if pred_prob >= best_threshold else "Normal"
 
-    # Severity
+    prediction = "Dyslexic" if pred_prob >= 0.5 else "Normal"
+
+    # --------------------------
+    # Severity calculation
+    # --------------------------
     confidence_percent = confidence * 100
     if prediction == "Normal":
         severity = "Normal (0)"
@@ -55,7 +51,9 @@ if uploaded_file is not None:
     else:
         severity = "Severe (>70)"
 
-    # Display
+    # --------------------------
+    # Display results
+    # --------------------------
     st.markdown(f"**Prediction:** {prediction}")
     st.markdown(f"**Confidence:** {confidence_percent:.2f}%")
     st.markdown(f"**Severity:** {severity}")
