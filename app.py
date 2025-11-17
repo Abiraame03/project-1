@@ -17,7 +17,7 @@ THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
 
 # Default values used only if real files are not loaded (Simulation Mode)
-DEFAULT_THRESHOLD = 0.5
+DEFAULT_THRESHOLD = 0.44
 DEFAULT_INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
