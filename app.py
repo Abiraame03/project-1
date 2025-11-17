@@ -6,52 +6,61 @@ import pickle
 import json
 import time
 import random
+import os # Added for checking file existence
 
 # --- Set Up Configuration ---
-# Note: The TTS configurations are removed as voice output is disabled.
 MODEL_PATH = "models/mobilenetv2_bilstm_final.h5"
 CLASS_MAP_PATH = "models/class_indices.pkl"
 THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
-THRESHOLD = 0.5
-INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
+# Default values used only if real files are not loaded
+DEFAULT_THRESHOLD = 0.5
+DEFAULT_INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
 st.header("🧠 Dyslexia Detection & Severity Prediction")
 st.markdown("Use your device camera or upload a behavioral image (e.g., drawing or writing sample) for analysis.")
 
-# --- Model Loading Structure (Simulated for Single-File Deployment) ---
+# --- Model Loading Structure (Prepared for Real Files) ---
 
 @st.cache_resource
 def load_model_and_metadata():
     """
-    Simulated loading of the ML model and metadata files.
-    
-    FOR PRODUCTION: To enable real prediction, you must uncomment the 'REAL LOADING' 
-    block below and ensure your 'models/' folder is deployed.
+    Attempts to load the real ML model and metadata files. 
+    Falls back to simulation mode if files are not found.
     """
     
-    st.warning(f"prediction of severity")
-
-    # --- SIMULATION VALUES ---
-    time.sleep(1) 
-    ml_model = None 
+    ml_model = None
+    threshold = DEFAULT_THRESHOLD
+    inv_map = DEFAULT_INV_MAP
     
-    # --- REAL LOADING (UNCOMMENT THIS BLOCK FOR PRODUCTION USE) ---
-    # global THRESHOLD, INV_MAP
-    # try:
-    #     ml_model = tf.keras.models.load_model(MODEL_PATH)
-    #     with open(CLASS_MAP_PATH, "rb") as f:
-    #         class_indices = pickle.load(f)
-    #     INV_MAP = {v: k for k, v in class_indices.items()}
-    #     with open(THRESHOLD_PATH, "r") as f:
-    #         THRESHOLD = json.load(f)["threshold"]
-    #     st.success("Model structure loaded successfully for production use.")
-    # except Exception as e:
-    #     # st.error(f"Failed to load real model files. {e}")
-    #     ml_model = None
-
-    return ml_model, INV_MAP, THRESHOLD
+    # Check if the models directory exists and contains the files
+    if all(os.path.exists(p) for p in [MODEL_PATH, CLASS_MAP_PATH, THRESHOLD_PATH]):
+        
+        # --- REAL LOADING (UNCOMMENT THIS BLOCK FOR PRODUCTION USE) ---
+        try:
+            st.info("Attempting to load real model files...")
+            time.sleep(1) # Visual delay for loading indicator
+            
+            ml_model = tf.keras.models.load_model(MODEL_PATH)
+            
+            with open(CLASS_MAP_PATH, "rb") as f:
+                class_indices = pickle.load(f)
+            inv_map = {v: k for k, v in class_indices.items()}
+            
+            with open(THRESHOLD_PATH, "r") as f:
+                threshold = json.load(f)["threshold"]
+                
+            st.success("✅ **Production Mode:** Real model loaded successfully.")
+            return ml_model, inv_map, threshold
+            
+        except Exception as e:
+            st.error(f"❌ Failed to load real model files, reverting to simulation. Error: {e}")
+            pass # Fall through to simulation mode
+    
+    # --- SIMULATION FALLBACK (Used if files are missing or loading fails) ---
+    st.warning(f"🚨 **Simulation Mode:** Model files are not included. Prediction and severity results are simulated.")
+    return ml_model, inv_map, threshold
 
 model, INV_MAP, THRESHOLD = load_model_and_metadata()
 
@@ -68,9 +77,10 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     
     # --- Get Prediction Probability (Confidence Score) ---
     if ml_model is not None:
+        # PRODUCTION: Use the real model's prediction
         prob = float(ml_model.predict(arr)[0][0])
     else:
-        # SIMULATION FALLBACK: Deterministic random probability
+        # SIMULATION: Generate a randomized score
         try:
             image_input.seek(0)
             seed = hash(image_input.getvalue()) % 1000
@@ -78,7 +88,7 @@ def predict_image(image_input, ml_model, inv_map, threshold):
             seed = int(time.time() * 1000) % 1000
         
         random.seed(seed)
-        prob = random.uniform(0.05, 0.95) # Range 5% to 95%
+        prob = random.uniform(0.05, 0.95) 
     
     # 1. Determine Class based on Confidence Score
     label = 1 if prob > threshold else 0
