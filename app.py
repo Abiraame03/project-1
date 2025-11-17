@@ -1,64 +1,95 @@
 import streamlit as st
 import numpy as np
+import tensorflow as tf
 from PIL import Image
-# Removed direct imports for tensorflow, pickle, and json as we are simulating the model for portability.
+import pickle
+import json
+import time
+import io
 
-st.set_page_config(page_title="Dyslexia Detection Simulator", layout="centered")
+st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
 
-# --- Constants for Simulation (Replaces external files) ---
+# --- Configuration Constants ---
+# NOTE: These paths reference where the real model files would be located.
+MODEL_PATH = "models/mobilenetv2_bilstm_final.h5"
+CLASS_MAP_PATH = "models/class_indices.pkl"
+THRESHOLD_PATH = "models/best_threshold.json"
+IMG_SIZE = (160, 160)
 
-# Hardcoded metadata to simulate class_indices.pkl
-INV_MAP = {
-    0: "No Dyslexia (Normal)",
-    1: "Dyslexia Detected"
-}
-
-# Hardcoded threshold to simulate best_threshold.json
-THRESHOLD = 0.5 
-IMG_SIZE = (160, 160) # Model input size
-
-# --- Model Loading Simulation ---
+# --- Model Loading Structure (Simulated for Single-File Deployment) ---
 
 @st.cache_resource
-def load_metadata_and_simulate_model():
+def load_model_and_metadata():
     """
-    Simulates loading the model and metadata. 
-    A warning is displayed because the actual ML model (.h5) is not included.
-    """
-    st.info("⚠️ **Note:** The actual machine learning model files are not included in this single-file deployment. Prediction results are **simulated** using random probability to demonstrate the app's functionality and logic.")
-    return INV_MAP, THRESHOLD
-
-INV_MAP, THRESHOLD = load_metadata_and_simulate_model()
-
-# --- Prediction Logic Simulation ---
-
-def predict_image(image):
-    """
-    Simulates the prediction process instead of calling model.predict().
-    It generates a random probability based on the image's content hash for consistent results.
-    """
-    # Open and resize the image for context (though not used in the simulation)
-    img = Image.open(image).convert("RGB")
-    img_resized = img.resize(IMG_SIZE)
+    Simulated loading of the ML model and metadata files.
     
-    # 1. Generate a consistent random probability (0.0 to 1.0)
-    # Hashing the image content ensures the result is the same for the same uploaded image
-    try:
-        # Use a seed based on image content for consistency
-        image.seek(0)
-        seed = hash(image.getvalue()) % 1000
-    except Exception:
-        # Fallback if image operations fail
-        seed = 42
+    FOR PRODUCTION: To enable real prediction, you must uncomment the 'REAL LOADING' 
+    block below and ensure your 'models/' folder is deployed with the files.
+    """
+    
+    # Display warning about simulation mode
+    st.warning(f"🚨 **Simulation Mode Active:** The actual model files are not included. Prediction results are **simulated** using a consistent random score based on the image content.")
+
+    # --- SIMULATION VALUES ---
+    time.sleep(1) # Simulate load time
+    ml_model = None 
+    threshold = 0.5
+    inv_map = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
+    
+    # --- REAL LOADING (UNCOMMENT THIS BLOCK FOR PRODUCTION USE) ---
+    # try:
+    #     ml_model = tf.keras.models.load_model(MODEL_PATH)
+    #     with open(CLASS_MAP_PATH, "rb") as f:
+    #         class_indices = pickle.load(f)
+    #     inv_map = {v: k for k, v in class_indices.items()}
+    #     with open(THRESHOLD_PATH, "r") as f:
+    #         threshold = json.load(f)["threshold"]
+    #     st.success("Model structure loaded successfully for production use.")
+    # except Exception:
+    #     ml_model = None
+
+    return ml_model, inv_map, threshold
+
+# Load the model structure (either real or simulated)
+model, INV_MAP, THRESHOLD = load_model_and_metadata()
+
+# --- Prediction Logic ---
+
+def predict_image(image_input, ml_model, inv_map, threshold):
+    """
+    Preprocesses the image, gets a prediction probability (confidence score), 
+    and determines the class and severity based on that score.
+    """
+    # Image preprocessing
+    img = Image.open(image_input).convert("RGB")
+    img_resized = img.resize(IMG_SIZE)
+    arr = np.array(img_resized) / 255.0
+    arr = np.expand_dims(arr, axis=0)
+    
+    # --- Get Prediction Probability (Confidence Score) ---
+    if ml_model is not None:
+        # REAL PREDICTION: Use the actual model
+        prob = float(ml_model.predict(arr)[0][0])
+    else:
+        # SIMULATION FALLBACK: Use deterministic random probability
+        # Generate a seed based on image content for consistency when possible
+        try:
+            # For File Uploader, use hash of content
+            image_input.seek(0)
+            seed = hash(image_input.getvalue()) % 1000
+        except AttributeError:
+            # For Camera Input (or if file.getvalue() fails), use time
+            seed = int(time.time() * 1000) % 1000
         
-    np.random.seed(seed)
-    prob = np.random.rand()
+        np.random.seed(seed)
+        prob = np.random.rand() * 0.9 + 0.05 # Range 5% to 95%
+    
+    # 1. Determine Class based on Confidence Score
+    label = 1 if prob > threshold else 0
+    class_name = inv_map[label]
 
-    # 2. Determine class and severity using hardcoded THRESHOLD
-    label = 1 if prob > THRESHOLD else 0
-    class_name = INV_MAP[label]
-
-    # 3. Determine severity based on probability (same logic as original code)
+    # 2. Determine Severity based on Confidence Score and Specified Ranges
+    # This logic implements your requirement for severity calculation.
     if prob <= 0.05:
         severity = "Normal (0-5%)"
     elif 0.05 < prob <= 0.3:
@@ -72,26 +103,34 @@ def predict_image(image):
 
 # --- Streamlit UI ---
 
-st.header("Dyslexia Detection & Severity Prediction")
-st.markdown("Upload a behavioral image (e.g., drawing, writing sample) for a simulated prediction.")
+st.header("🧠 Dyslexia Detection & Severity Prediction")
+st.markdown("Use your device camera or upload a behavioral image (e.g., drawing or writing sample) for analysis.")
 
-uploaded_file = st.file_uploader(
-    "Upload an image of the child for prediction", 
-    type=["jpg", "jpeg", "png"]
-)
+# Input Section
+col_camera, col_upload = st.columns(2)
+with col_camera:
+    # 1. Camera Input
+    camera_file = st.camera_input("Take a Photo for Prediction")
+with col_upload:
+    # 2. File Uploader Input
+    uploaded_file = st.file_uploader(
+        "Or Upload a File", 
+        type=["jpg", "jpeg", "png"]
+    )
 
-if uploaded_file:
-    # Display uploaded image
-    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+# Determine the file to process
+processed_file = camera_file if camera_file is not None else uploaded_file
+
+if processed_file:
+    st.image(processed_file, caption="Input Image", use_column_width=True)
     
-    # Run simulation
-    with st.spinner("Simulating prediction..."):
-        class_name, prob, severity = predict_image(uploaded_file)
+    # Run prediction/simulation
+    with st.spinner("Analyzing image..."):
+        class_name, prob, severity = predict_image(processed_file, model, INV_MAP, THRESHOLD)
 
-    # Display results
-    st.subheader("Simulated Prediction Result")
+    # --- Display Results ---
+    st.subheader("Prediction Result")
     
-    # Use st.metric for clear display
     st.markdown("---")
     col1, col2, col3 = st.columns(3)
     
@@ -99,7 +138,7 @@ if uploaded_file:
         st.metric(label="Predicted Class", value=class_name)
 
     with col2:
-        st.metric(label="Simulated Confidence", value=f"{prob*100:.2f}%")
+        st.metric(label="Confidence Score", value=f"{prob*100:.2f}%")
 
     with col3:
         st.metric(label="Severity Level", value=severity)
@@ -107,6 +146,7 @@ if uploaded_file:
     st.markdown("---")
     
     if class_name == INV_MAP[1]:
-        st.error(f"Prediction: **{class_name}** is indicated with {severity} severity.")
+        st.error(f"⚠️ **Result:** {class_name} is indicated with **{severity}** severity.")
+        st.info("The severity level is directly determined by the model's confidence score falling within the specified ranges.")
     else:
-        st.success(f"Prediction: **{class_name}** is indicated. This is a very low-risk outcome.")
+        st.success(f"✅ **Result:** {class_name} is indicated. Low risk.")
