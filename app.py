@@ -12,12 +12,12 @@ import os
 
 # Define Paths (MUST match files in your local 'models/' directory)
 MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5"
-CLASS_MAP_PATH = "models/class_indices_best.pkl"
+CLASS_MAP_PATH = "models/class_indices.pkl"
 THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
 
 # Default values used only if real files are not loaded (Simulation Mode)
-DEFAULT_THRESHOLD = 0.44
+DEFAULT_THRESHOLD = 0.5
 DEFAULT_INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
@@ -69,10 +69,10 @@ def load_model_and_metadata():
     # --- SIMULATION FALLBACK ---
     missing_files = [p for p in required_files if not os.path.exists(p)]
     if missing_files:
-        st.warning(f" Predictions are also simulated")
+        st.warning(f"Predictions are simulated")
     else:
          # Should not happen if all_files_exist is false, but covers edge cases
-        st.warning(f" Predictions are also simulated.")
+        st.warning(f"Predictions are simulated.")
         
     return ml_model, inv_map, threshold
 
@@ -120,7 +120,8 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     # 3. Determine Severity based on Confidence Score (The model is the primary predictor of severity)
     prob_percent = prob * 100
     
-    if prob_percent < 30:
+    # The severity ranges are fixed based on the model's output probability
+    if prob_percent < 10:
         severity_tag = "Low Risk"
         severity_range = "0-9.9%"
     elif prob_percent < 60:
@@ -178,6 +179,19 @@ def generate_handwriting_features(severity_tag):
 
 # --- V. Streamlit UI ---
 
+# Add the adjustable threshold to the sidebar
+st.sidebar.header("Advanced Prediction Settings")
+st.sidebar.info("Adjust the sensitivity (threshold) to tune the classification and reduce false positives.")
+current_threshold = st.sidebar.slider(
+    "Prediction Threshold (Probability Cutoff)", 
+    min_value=0.01, 
+    max_value=0.99, 
+    value=THRESHOLD, # Use the loaded or default value
+    step=0.01,
+    help=f"Probabilities above this value are classified as 'Dyslexia Detected'. Default from file: {THRESHOLD:.2f}"
+)
+
+
 # Input Section
 col_camera, col_upload = st.columns(2)
 with col_camera:
@@ -195,7 +209,8 @@ if processed_file:
     
     # --- Run Prediction/Simulation ---
     with st.spinner("Analyzing image..."):
-        class_name, prob, severity = predict_image(processed_file, model, INV_MAP, THRESHOLD)
+        # Use the user-adjusted threshold for prediction
+        class_name, prob, severity = predict_image(processed_file, model, INV_MAP, current_threshold)
 
     # --- Display Results ---
     st.subheader("Prediction and Severity Results")
@@ -216,8 +231,8 @@ if processed_file:
     st.markdown("---")
     # Clarified Score Basis Note
     st.markdown("### Score Basis and Severity Prediction")
-    st.markdown("""
-        **The Model's Confidence (Probability)** is the primary, quantitative factor determining the severity level.
+    st.markdown(f"""
+        **The Model's Confidence (Probability)** is the primary, quantitative factor determining the severity level, based on a classification cutoff of **{current_threshold:.2f}**.
         The severity level then acts as the input for generating the detailed feature analysis below.
     """)
     st.markdown("---")
