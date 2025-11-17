@@ -125,10 +125,10 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     # Updated Severity Thresholds (Set by you)
     if prob_percent <= 15:
         severity_tag = "Normal"
-        severity_range = "0-15%"
+        severity_range = "0-10%"
     elif prob_percent <= 40:
         severity_tag = "Mild"
-        severity_range = "15-40%"
+        severity_range = "10-40%"
     elif prob_percent <= 80:
         severity_tag = "Moderate"
         severity_range = "40-80%"
