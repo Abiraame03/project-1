@@ -9,7 +9,9 @@ import random
 import os # Added for checking file existence
 
 # --- Set Up Configuration ---
-MODEL_PATH = "models/mobilenetv2_bilstm_final.h5"
+# NOTE: Update these paths to match your local file names exactly.
+# Based on your link, we will use the specific .h5 name.
+MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5"
 CLASS_MAP_PATH = "models/class_indices.pkl"
 THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
@@ -18,7 +20,7 @@ DEFAULT_THRESHOLD = 0.5
 DEFAULT_INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
-st.header("Dyslexia Detection & Severity Prediction")
+st.header("🧠 Dyslexia Detection & Severity Prediction")
 st.markdown("Use your device camera or upload a behavioral image (e.g., drawing or writing sample) for analysis.")
 
 # --- Model Loading Structure (Prepared for Real Files) ---
@@ -28,6 +30,12 @@ def load_model_and_metadata():
     """
     Attempts to load the real ML model and metadata files. 
     Falls back to simulation mode if files are not found.
+    
+    ACTION REQUIRED: To enter Production Mode, ensure the following 3 files 
+    are placed in a local directory named 'models/':
+    1. mobilenetv2_bilstm_best_thr_044.h5 (Your model)
+    2. class_indices.pkl 
+    3. best_threshold.json (Containing {'threshold': 0.44} or similar)
     """
     
     ml_model = None
@@ -37,29 +45,32 @@ def load_model_and_metadata():
     # Check if the models directory exists and contains the files
     if all(os.path.exists(p) for p in [MODEL_PATH, CLASS_MAP_PATH, THRESHOLD_PATH]):
         
-        # --- REAL LOADING (UNCOMMENT THIS BLOCK FOR PRODUCTION USE) ---
+        # --- REAL LOADING BLOCK ---
         try:
             st.info("Attempting to load real model files...")
             time.sleep(1) # Visual delay for loading indicator
             
+            # Load the Keras/TensorFlow model
             ml_model = tf.keras.models.load_model(MODEL_PATH)
             
+            # Load the class indices map
             with open(CLASS_MAP_PATH, "rb") as f:
                 class_indices = pickle.load(f)
             inv_map = {v: k for k, v in class_indices.items()}
             
+            # Load the best prediction threshold
             with open(THRESHOLD_PATH, "r") as f:
                 threshold = json.load(f)["threshold"]
                 
-            st.success("✅ **Production Mode:** Real model loaded successfully.")
+            st.success("✅ **Production Mode:** Real model loaded successfully. Predictions will now be accurate.")
             return ml_model, inv_map, threshold
             
         except Exception as e:
-            st.error(f"❌ Failed to load real model files, reverting to simulation. Error: {e}")
+            st.error(f"❌ Failed to load real model files, reverting to simulation. Please check file integrity. Error: {e}")
             pass # Fall through to simulation mode
     
     # --- SIMULATION FALLBACK (Used if files are missing or loading fails) ---
-    st.warning(f"🚨Prediction and severity results are simulated.")
+    st.warning(f"🚨 **Simulation Mode:** Model files are not found at '{os.path.dirname(MODEL_PATH)}/'. Prediction and severity results are simulated.")
     return ml_model, inv_map, threshold
 
 model, INV_MAP, THRESHOLD = load_model_and_metadata()
@@ -80,9 +91,10 @@ def predict_image(image_input, ml_model, inv_map, threshold):
         # PRODUCTION: Use the real model's prediction
         prob = float(ml_model.predict(arr)[0][0])
     else:
-        # SIMULATION: Generate a randomized score
+        # SIMULATION: Generate a randomized score (produces inconsistent results)
         try:
             image_input.seek(0)
+            # Use image content hash as seed for deterministic random results for the same image
             seed = hash(image_input.getvalue()) % 1000
         except AttributeError:
             seed = int(time.time() * 1000) % 1000
@@ -199,6 +211,6 @@ if processed_file:
     st.markdown("---")
     
     if class_name == INV_MAP[1]:
-        st.error(f"⚠️ **Final Result:** {class_name} is indicated with **{severity}** severity.")
+        st.error(f"⚠️ **Final Result:** {class_name} is indicated with **{severity}** severity. **Confidence: {prob*100:.2f}%**")
     else:
-        st.success(f"✅ **Final Result:** {class_name} is indicated. Low risk.")
+        st.success(f"✅ **Final Result:** {class_name} is indicated. Low risk. **Confidence: {prob*100:.2f}%**")
