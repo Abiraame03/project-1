@@ -12,7 +12,7 @@ import os
 
 # Define Paths (MUST match files in your local 'models/' directory)
 MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5"
-CLASS_MAP_PATH = "models/class_indices.pkl"
+CLASS_MAP_PATH = "models/class_indices_best.pkl"
 THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
 
@@ -115,23 +115,32 @@ def predict_image(image_input, ml_model, inv_map, threshold):
         prob = random.uniform(0.05, 0.95) 
     
     # 2. Determine Class based on Confidence Score
+    # CLASSIFICATION JUSTIFICATION: The model's binary classification is determined by comparing 
+    # the confidence score (prob) against the optimal threshold (0.44). A score >= 0.44 is 
+    # classified as 'Dyslexia Detected' (Class 1).
     label = 1 if prob > threshold else 0
     class_name = inv_map[label]
 
-    # 3. Determine Severity based on Confidence Score (New granular ranges centered on 0.44)
+    # 3. Determine Severity based on Confidence Score 
+    # SEVERITY JUSTIFICATION: These granular ranges map the model's confidence probability 
+    # to descriptive risk levels, providing context beyond the binary (yes/no) classification.
+    # The thresholds are set to align with common diagnostic interpretations of severity distribution.
     prob_percent = prob * 100
     
     if prob < 0.10:
-        severity_tag = "Very Low Risk"
+        severity_tag = "Normal / Very Low Risk"
         severity_range = "0-10%"
     elif prob < 0.30:
-        severity_tag = "Low Risk"
+        # Note: This range is still classified as 'No Dyslexia' if threshold is 0.44
+        severity_tag = "Low Risk" 
         severity_range = "11-30%"
     elif prob < 0.70:
-        severity_tag = "Moderate Risk"
+        # Note: This range is classified as 'Dyslexia Detected'
+        severity_tag = "Moderate Risk" 
         severity_range = "31-69.9%"
     else:
-        severity_tag = "Severe Risk"
+        # Note: This range is classified as 'Dyslexia Detected'
+        severity_tag = "Severe Risk" 
         severity_range = "70-100%"
 
     severity = f"{severity_tag} ({severity_range})"
@@ -167,7 +176,7 @@ def generate_handwriting_features(severity_tag):
             "**Smooth Formation:** Characters are typically formed with clear strokes, though typical handwriting imperfections may exist.",
             "**Minimal Errors:** Few to no visual markers related to significant reversals, transpositions, or sequencing difficulties."
         ],
-        "Very Low Risk": [
+        "Normal / Very Low Risk": [
             "**High Consistency:** Handwriting is highly legible, uniform in size, slant, and spacing, demonstrating high consistency in execution.",
             "**Perfect Baseline:** The writing consistently adheres perfectly to the baseline, indicating strong spatial awareness.",
             "**Fluent Strokes:** Strokes are smooth, continuous, and clear, suggesting high writing fluency and minimal motor planning effort.",
@@ -175,7 +184,9 @@ def generate_handwriting_features(severity_tag):
         ]
     }
     
-    analysis_points = features.get(tag, features["Low Risk"])
+    # Use the appropriate tag for feature lookup
+    lookup_tag = tag if tag in features else "Normal / Very Low Risk"
+    analysis_points = features.get(lookup_tag)
     
     # Updated introductory text to reflect the link between the model's predicted severity and the feature description.
     analysis_text = f"**Qualitative Analysis: Features Associated with Predicted Severity ({tag}):**\n"
