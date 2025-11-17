@@ -1,1 +1,9 @@
+tensorflow==2.12.0
+streamlit
+opencv-python-headless
+numpy
+pillow
+matplotlib
+protobuf==3.20.*
+scikit-learn
 
