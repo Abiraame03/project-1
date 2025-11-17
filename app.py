@@ -1,27 +1,22 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
-import tflite_runtime.interpreter as tflite
-import time
+from tensorflow.keras.models import load_model
 
 # --------------------------
 # Config
 # --------------------------
 IMG_SIZE = (160, 160)  # Input image size
-TFLITE_MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.tflite"
+MODEL_PATH = "models/mobilenetv2_bilstm_final.h5"
 
 # --------------------------
-# Load TFLite model (cached)
+# Load Keras model (cached)
 # --------------------------
 @st.cache_resource
-def load_tflite_model():
-    interpreter = tflite.Interpreter(model_path=TFLITE_MODEL_PATH)
-    interpreter.allocate_tensors()
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    return interpreter, input_details, output_details
+def load_keras_model():
+    return load_model(MODEL_PATH)
 
-interpreter, input_details, output_details = load_tflite_model()
+model = load_keras_model()
 
 # --------------------------
 # Streamlit UI
@@ -42,11 +37,8 @@ if uploaded_file:
             img_array = np.array(img) / 255.0
             img_array = np.expand_dims(img_array, axis=0).astype(np.float32)
 
-            # TFLite prediction
-            interpreter.set_tensor(input_details[0]['index'], img_array)
-            interpreter.invoke()
-            prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
-
+            # Prediction
+            prediction = model.predict(img_array)[0][0]
             confidence = float(prediction) * 100
             pred_label = "Dyslexic" if prediction >= 0.5 else "Normal"
 
