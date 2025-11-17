@@ -12,7 +12,7 @@ import os
 
 # Define Paths (MUST match files in your local 'models/' directory)
 MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5"
-CLASS_MAP_PATH = "models/class_indices.pkl"
+CLASS_MAP_PATH = "models/class_indices_best.pkl"
 THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
 
@@ -21,8 +21,8 @@ DEFAULT_THRESHOLD = 0.5
 DEFAULT_INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
-st.header("Dyslexia Detection & Severity Prediction")
-st.markdown("Model files are in a local 'models/' directory.")
+st.header("🧠 Dyslexia Detection & Severity Prediction")
+st.markdown("⚠️ **ACTION REQUIRED:** To get stable, correct predictions, please ensure your model files are in a local 'models/' directory.")
 
 # --- II. Model Loading and Environment Check ---
 
@@ -69,10 +69,10 @@ def load_model_and_metadata():
     # --- SIMULATION FALLBACK ---
     missing_files = [p for p in required_files if not os.path.exists(p)]
     if missing_files:
-        st.warning(f"Predictions are simulated")
+        st.warning(f"🚨 **Simulation Mode:** Model files not found. Missing: {', '.join(missing_files)}. Predictions are randomized and incorrect.")
     else:
          # Should not happen if all_files_exist is false, but covers edge cases
-        st.warning(f"Predictions are simulated.")
+        st.warning(f"🚨 **Simulation Mode:** Model files cannot be loaded. Predictions are randomized and incorrect.")
         
     return ml_model, inv_map, threshold
 
@@ -121,12 +121,12 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     prob_percent = prob * 100
     
     # The severity ranges are fixed based on the model's output probability
-    if prob_percent < 10:
+    if prob_percent < 30:
         severity_tag = "Low Risk"
-        severity_range = "0-9.9%"
+        severity_range = "0-29.9%"
     elif prob_percent < 60:
         severity_tag = "Mild to Moderate Risk"
-        severity_range = "10-59.9%"
+        severity_range = "30-59.9%"
     else:
         severity_tag = "Severe Risk"
         severity_range = "60-100%"
