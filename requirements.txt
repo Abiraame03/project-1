@@ -1,9 +1,7 @@
-streamlit>=1.20.0
-tensorflow==2.15.0
-numpy
-Pillow
-opencv-python-headless
-scikit-learn
-matplotlib
-gTTS
-pickle5
+streamlit==1.26.0
+tensorflow==2.13.0
+numpy==1.26.3
+pillow==10.1.0
+opencv-python==4.8.1.78
+scikit-learn==1.3.1
+cloudpickle==2.3.1
