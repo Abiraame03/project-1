@@ -5,30 +5,20 @@ from PIL import Image
 import pickle
 import json
 import time
-import base64
-import io
-import wave
-import struct
 import random
-import requests
 
-# --- Set Up Gemini API Configuration ---
-# Leave apiKey as an empty string; the environment will handle it.
-API_KEY = ""
-TTS_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent"
-TTS_MODEL = "gemini-2.5-flash-preview-tts"
-TTS_VOICE = "Kore" # Clear, firm voice
-TTS_SAMPLE_RATE = 24000 
-
-st.set_page_config(page_title="Dyslexia Detection & TTS Analysis", layout="centered")
-
-# --- Configuration Constants ---
+# --- Set Up Configuration ---
+# Note: The TTS configurations are removed as voice output is disabled.
 MODEL_PATH = "models/mobilenetv2_bilstm_final.h5"
 CLASS_MAP_PATH = "models/class_indices.pkl"
 THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
 THRESHOLD = 0.5
 INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
+
+st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
+st.header("🧠 Dyslexia Detection & Severity Prediction")
+st.markdown("Use your device camera or upload a behavioral image (e.g., drawing or writing sample) for analysis.")
 
 # --- Model Loading Structure (Simulated for Single-File Deployment) ---
 
@@ -41,7 +31,7 @@ def load_model_and_metadata():
     block below and ensure your 'models/' folder is deployed.
     """
     
-    st.warning(f"🚨 **Simulation Mode:** Model files are not included. Prediction and severity results are simulated. TTS functionality is configured for live API calls with a fallback.")
+    st.warning(f"🚨 **Simulation Mode:** Model files are not included. Prediction and severity results are simulated. ")
 
     # --- SIMULATION VALUES ---
     time.sleep(1) 
@@ -150,95 +140,7 @@ def generate_handwriting_features(severity_tag):
     
     return text
 
-# --- TTS API Logic ---
-
-def pcm_to_wav(pcm_data_base64, sample_rate):
-    """Converts base64 PCM audio data to WAV format bytes."""
-    pcm_data = base64.b64decode(pcm_data_base64)
-    
-    wav_io = io.BytesIO()
-    with wave.open(wav_io, 'wb') as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)  # 16-bit PCM (2 bytes)
-        wf.setframerate(sample_rate)
-        wf.writeframes(pcm_data)
-    return wav_io.getvalue()
-
-# Base64 encoded tiny silent WAV file (for fallback)
-# 1 channel, 16bit, 24000Hz, 0.1 seconds of silence
-SILENT_WAV_BASE64 = "UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAABKAAACABAAZGF0YAAAAAAA"
-
-def generate_tts_audio(text_to_speak):
-    """Calls the Gemini TTS API using requests and returns the base64 audio data with exponential backoff."""
-    headers = {'Content-Type': 'application/json'}
-    payload = {
-        "contents": [{
-            "parts": [{ "text": text_to_speak }]
-        }],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {
-                "voiceConfig": {
-                    "prebuiltVoiceConfig": { "voiceName": TTS_VOICE }
-                }
-            }
-        },
-        "model": TTS_MODEL
-    }
-    
-    # Build URL: only append key if API_KEY is not empty
-    if API_KEY:
-        url = f"{TTS_API_URL}?key={API_KEY}"
-    else:
-        url = TTS_API_URL # URL without empty key parameter
-
-    # Implementing Exponential Backoff
-    max_retries = 5
-    base_delay = 1
-    
-    for attempt in range(max_retries):
-        try:
-            # Synchronous API call
-            response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=10)
-            response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
-            
-            result = response.json()
-            candidate = result.get('candidates', [{}])[0]
-            part = candidate.get('content', {}).get('parts', [{}])[0]
-            audio_data = part.get('inlineData', {}).get('data')
-            mime_type = part.get('inlineData', {}).get('mimeType')
-
-            # Check for correct audio format (audio/L16)
-            if audio_data and mime_type and mime_type.startswith("audio/L16"):
-                st.success("Voice output generated successfully via API.")
-                return audio_data
-            else:
-                # Log error if structure is wrong
-                if attempt == max_retries - 1: st.error("TTS API response missing expected audio data.")
-                return None
-            
-        except requests.exceptions.RequestException as e:
-            if attempt < max_retries - 1:
-                # Retry only on transient errors (e.g., 429, 500, 503, timeout)
-                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-                time.sleep(delay)
-            else:
-                st.error(f"TTS API request failed after {max_retries} attempts: {e}. Falling back to silent audio.")
-                # Fallback on final failure
-                break
-        except Exception as e:
-            # General error during processing (JSON parsing, etc.)
-            st.error(f"An unexpected error occurred during TTS processing: {e}. Falling back to silent audio.")
-            break
-    
-    # --- FALLBACK MECHANISM ---
-    # Return the base64 string of the silent WAV file
-    return SILENT_WAV_BASE64
-
 # --- Streamlit UI ---
-
-st.header("🧠 Dyslexia Detection & Severity Prediction")
-st.markdown("Use your device camera or upload a behavioral image (e.g., drawing or writing sample) for analysis.")
 
 # Input Section
 col_camera, col_upload = st.columns(2)
@@ -277,38 +179,16 @@ if processed_file:
         
     st.markdown("---")
 
-    # --- Handwriting Feature Analysis and TTS Output ---
-    st.subheader("Handwriting Feature Analysis (Voice Output)")
+    # --- Handwriting Feature Analysis (Text Output Only) ---
+    st.subheader("Handwriting Feature Analysis")
     
-    # 1. Generate Analysis Text
+    # Generate Analysis Text
     analysis_text = generate_handwriting_features(severity_tag)
-    st.markdown(f"**Text Analysis:** {analysis_text}")
-    
-    # 2. Generate and Play Audio
-    with st.spinner("Attempting to generate voice output..."):
-        tts_result_base64 = generate_tts_audio(analysis_text) 
-    
-    try:
-        # Check if the result is the silent fallback
-        is_fallback = tts_result_base64 == SILENT_WAV_BASE64
-        
-        if is_fallback:
-            # Convert silent WAV base64 string directly to WAV bytes
-            audio_bytes = base64.b64decode(tts_result_base64)
-            st.warning("🎤 Voice output failed due to network error. Playing silent placeholder audio.")
-        else:
-            # Convert the returned base64 PCM data to a WAV byte stream
-            audio_bytes = pcm_to_wav(tts_result_base64, TTS_SAMPLE_RATE)
-            st.success("Audio playback initialized.")
-            
-        st.audio(audio_bytes, format='audio/wav')
-        
-    except Exception as e:
-        st.error(f"Error converting or playing audio: {e}")
+    st.markdown(f"**Detailed Analysis:** {analysis_text}")
     
     st.markdown("---")
     
     if class_name == INV_MAP[1]:
-        st.error(f"⚠️ **Result:** {class_name} is indicated with **{severity}** severity.")
+        st.error(f"⚠️ **Final Result:** {class_name} is indicated with **{severity}** severity.")
     else:
-        st.success(f"✅ **Result:** {class_name} is indicated. Low risk.")
+        st.success(f"✅ **Final Result:** {class_name} is indicated. Low risk.")
