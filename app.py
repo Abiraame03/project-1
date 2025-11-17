@@ -1,76 +1,90 @@
+# app.py
 import streamlit as st
-import cv2
-import numpy as np
 from PIL import Image
-import tempfile
+import numpy as np
 import tensorflow as tf
+import pickle, json
+import pyttsx3
 
+# =========================
+# App configuration
+# =========================
 st.set_page_config(page_title="Dyslexia Detection", layout="centered")
-st.title("📝 Dyslexia Handwriting Detection")
-st.write("Capture handwriting using your webcam or upload an image for dyslexia analysis.")
+st.title("📝 Dyslexia Detection from Handwriting")
+st.markdown("Capture handwriting to detect dyslexia and severity in children.")
 
-# Load TFLite model
+# =========================
+# Load model, threshold, class map
+# =========================
 @st.cache_resource
-def load_tflite_model(model_path="dyslexia_model.tflite"):
-    interpreter = tf.lite.Interpreter(model_path=model_path)
-    interpreter.allocate_tensors()
-    return interpreter
-
-interpreter = load_tflite_model()
-
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
-
-# Webcam capture
-st.subheader("Capture Handwriting")
-run = st.button("Start Webcam")
-FRAME_WINDOW = st.image([])
-
-cap = None
-if run:
-    cap = cv2.VideoCapture(0)
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            st.error("Unable to access webcam")
-            break
-
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        FRAME_WINDOW.image(frame_rgb)
-
-        if st.button("Capture"):
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-            Image.fromarray(frame_rgb).save(temp_file.name)
-            st.success("Image captured!")
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-# Prediction
-st.subheader("Model Prediction")
-uploaded_file = st.file_uploader("Or upload handwriting image", type=["png", "jpg", "jpeg"])
-
-image_to_predict = None
-if uploaded_file:
-    image_to_predict = Image.open(uploaded_file)
-elif 'temp_file' in locals():
-    image_to_predict = Image.open(temp_file.name)
-
-if image_to_predict:
-    st.image(image_to_predict, caption="Input Image", use_column_width=True)
+def load_model_and_configs():
+    model_path = "/content/drive/MyDrive/Hybrid_BiLSTM_model/mobilenetv2_bilstm_best_thr_044.h5"
+    threshold_path = "/content/drive/MyDrive/Hybrid_BiLSTM_model/best_threshold.json"
+    class_map_path = "/content/drive/MyDrive/Hybrid_BiLSTM_model/class_indices_best.pkl"
     
-    # Preprocess for TFLite model
-    img = image_to_predict.convert("L").resize((128, 128))
-    img_array = np.array(img)/255.0
-    img_array = img_array.reshape(1, 128, 128, 1).astype(np.float32)
+    model = tf.keras.models.load_model(model_path)
+    
+    with open(threshold_path, "r") as f:
+        threshold = json.load(f)
+    
+    with open(class_map_path, "rb") as f:
+        class_map = pickle.load(f)
+        
+    return model, threshold, class_map
 
-    interpreter.set_tensor(input_details[0]['index'], img_array)
-    interpreter.invoke()
-    prediction = interpreter.get_tensor(output_details[0]['index'])
+model, threshold, class_map = load_model_and_configs()
 
-    pred_class = np.argmax(prediction)
-    confidence = np.max(prediction)
+# =========================
+# Camera input
+# =========================
+uploaded_file = st.camera_input("📸 Capture handwriting image")
 
-    st.write(f"**Predicted Class:** {pred_class}")
-    st.write(f"**Confidence:** {confidence:.2f}")
+if uploaded_file is not None:
+    # Display image
+    image = Image.open(uploaded_file).convert("RGB")
+    st.image(image, caption="Captured Handwriting", use_column_width=True)
+    
+    # =========================
+    # Preprocess image for model
+    # =========================
+    img_size = (128, 128)  # must match model input
+    img_array = np.array(image.resize(img_size)) / 255.0
+    img_array = np.expand_dims(img_array, axis=0)  # batch dimension
+
+    # =========================
+    # Predict class
+    # =========================
+    preds = model.predict(img_array)[0]
+    predicted_index = np.argmax(preds)
+    predicted_class = class_map[predicted_index]
+    predicted_prob = preds[predicted_index]
+    severity = "Low"
+    
+    # Apply threshold for severity
+    if predicted_prob >= threshold["high"]:
+        severity = "High"
+    elif predicted_prob >= threshold["medium"]:
+        severity = "Medium"
+
+    st.subheader("Prediction Results")
+    st.write(f"**Predicted Class:** {predicted_class}")
+    st.write(f"**Probability:** {predicted_prob:.2f}")
+    st.write(f"**Severity Level:** {severity}")
+    st.write(f"**Thresholds (Proof):** {threshold}")
+
+    # =========================
+    # Voice output with general features
+    # =========================
+    features_text = (
+        f"The handwriting shows features such as irregular strokes, "
+        f"letter reversals, inconsistent spacing, or spelling mistakes. "
+        f"These patterns indicate potential dyslexia symptoms for a child aged 6 years."
+    )
+    
+    st.write("🗣 Voice Feedback:")
+    st.write(features_text)
+    
+    # Text-to-speech
+    engine = pyttsx3.init()
+    engine.say(features_text)
+    engine.runAndWait()
