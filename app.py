@@ -268,7 +268,7 @@ if processed_file:
     if severity_tag == "Moderate Risk":
         qualitative_justification = (
             "The detailed feature analysis indicates the **presence of some subtle, inconsistent markers** associated with the Moderate Risk category. "
-            "However, the model's overall quantitative confidence score was marginally insufficient to cross the detection threshold, confirming the moderate dyslexic classification."
+            "However, the model's overall quantitative confidence score was marginally insufficient to cross the detection threshold, confirming the moderate or low risk dyslexic classification."
         )
     elif severity_tag == "Severe Risk":
         # This case is highly unlikely in the 'else' block, but handles the possibility of a near-1.0 threshold
