@@ -123,13 +123,13 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     
     if prob < 0.20:
         severity_tag = "Very Low Risk"
-        severity_range = "0-19.9%"
+        severity_range = "0-10%"
     elif prob < 0.44:
         severity_tag = "Low Risk"
-        severity_range = "20-43.9%"
+        severity_range = "10-30%"
     elif prob < 0.70:
         severity_tag = "Moderate Risk"
-        severity_range = "44-69.9%"
+        severity_range = "30-69.9%"
     else:
         severity_tag = "Severe Risk"
         severity_range = "70-100%"
