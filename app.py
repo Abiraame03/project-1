@@ -69,10 +69,10 @@ def load_model_and_metadata():
     # --- SIMULATION FALLBACK ---
     missing_files = [p for p in required_files if not os.path.exists(p)]
     if missing_files:
-        st.warning(f"Predictions are also simulated.")
+        st.warning(f" Predictions are also simulated")
     else:
          # Should not happen if all_files_exist is false, but covers edge cases
-        st.warning(f"Predictions are also simulated")
+        st.warning(f" Predictions are also simulated.")
         
     return ml_model, inv_map, threshold
 
@@ -117,15 +117,15 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     label = 1 if prob > threshold else 0
     class_name = inv_map[label]
 
-    # 3. Determine Severity based on Confidence Score (The original, unverified definition)
+    # 3. Determine Severity based on Confidence Score (The model is the primary predictor of severity)
     prob_percent = prob * 100
     
     if prob_percent < 30:
         severity_tag = "Low Risk"
-        severity_range = "0-29.9%"
+        severity_range = "0-9.9%"
     elif prob_percent < 60:
         severity_tag = "Mild to Moderate Risk"
-        severity_range = "30-59.9%"
+        severity_range = "10-59.9%"
     else:
         severity_tag = "Severe Risk"
         severity_range = "60-100%"
@@ -136,7 +136,10 @@ def predict_image(image_input, ml_model, inv_map, threshold):
 # --- IV. Handwriting Feature Generation (Improved Dyslexic Features) ---
 
 def generate_handwriting_features(severity_tag):
-    """Generates a detailed analysis text based on the severity level, focusing on common dyslexic handwriting markers."""
+    """
+    Generates a detailed analysis text based on the severity level.
+    The output features are characteristic of the predicted risk level.
+    """
     
     tag = severity_tag.split("(")[0].strip() # Extracts 'Low Risk', 'Mild to Moderate Risk', or 'Severe Risk'
 
@@ -164,7 +167,10 @@ def generate_handwriting_features(severity_tag):
     
     analysis_points = features.get(tag, features["Low Risk"])
     
-    analysis_text = f"**Based on the predicted severity level of {tag}, the analysis identified the following key visual markers associated with developmental dyslexia:**\n"
+    # Updated introductory text to reflect the link between the model's predicted severity and the feature description.
+    analysis_text = f"**Qualitative Analysis: Features Associated with Predicted Severity ({tag}):**\n"
+    analysis_text += "The following are descriptions of visual handwriting markers **characteristic** of the predicted severity level. The severity level itself is calculated based on the model's high confidence score in the input image.\n\n"
+    analysis_text += "**Key Visual Markers:**\n"
     for point in analysis_points:
         analysis_text += f"- {point}\n"
     
@@ -208,17 +214,17 @@ if processed_file:
         st.metric(label="Severity Level", value=severity)
         
     st.markdown("---")
-    # Original score basis note
-    st.markdown("### Score Basis Note")
+    # Clarified Score Basis Note
+    st.markdown("### Score Basis and Severity Prediction")
     st.markdown("""
-        The severity score is derived directly from the model's statistical confidence (probability) that the image represents 'Dyslexia Detected'. 
-        Higher confidence implies a higher risk level.
+        **The Model's Confidence (Probability)** is the primary, quantitative factor determining the severity level.
+        The severity level then acts as the input for generating the detailed feature analysis below.
     """)
     st.markdown("---")
     
 
     # --- Handwriting Feature Analysis (Text Output) ---
-    st.subheader("Detailed Handwriting Feature Analysis")
+    st.subheader("Detailed Feature Analysis")
     
     # Generate Analysis Text based on severity
     analysis_text = generate_handwriting_features(severity)
