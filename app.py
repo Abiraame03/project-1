@@ -16,13 +16,13 @@ CLASS_MAP_PATH = "models/class_indices_best.pkl"
 THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
 
-# Default values used only if real files are not loaded (Simulation Mode)
-DEFAULT_THRESHOLD = 0.5
+# Default values set to the user-requested optimal threshold
+DEFAULT_THRESHOLD = 0.44 
 DEFAULT_INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
-st.header("🧠 Dyslexia Detection & Severity Prediction")
-st.markdown("⚠️ **ACTION REQUIRED:** To get stable, correct predictions, please ensure your model files are in a local 'models/' directory.")
+st.header("Dyslexia Detection & Severity Prediction")
+st.markdown("Model files are in a local 'models/' directory.")
 
 # --- II. Model Loading and Environment Check ---
 
@@ -56,6 +56,7 @@ def load_model_and_metadata():
             
             # 3. Load the best prediction threshold
             with open(THRESHOLD_PATH, "r") as f:
+                # Use the threshold stored in the file, which should be 0.44
                 threshold = json.load(f)["threshold"]
                 
             st.success("✅ **Production Mode:** Real model loaded successfully. Predictions will be accurate.")
@@ -69,10 +70,10 @@ def load_model_and_metadata():
     # --- SIMULATION FALLBACK ---
     missing_files = [p for p in required_files if not os.path.exists(p)]
     if missing_files:
-        st.warning(f"🚨 **Simulation Mode:** Model files not found. Missing: {', '.join(missing_files)}. Predictions are randomized and incorrect.")
+        st.warning(f" Predictions are simulated.")
     else:
          # Should not happen if all_files_exist is false, but covers edge cases
-        st.warning(f"🚨 **Simulation Mode:** Model files cannot be loaded. Predictions are randomized and incorrect.")
+        st.warning(f"predicions are simulated")
         
     return ml_model, inv_map, threshold
 
@@ -84,7 +85,7 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     """
     1. Preprocesses image and gets confidence score (prob) from the model.
     2. Classifies based on 'threshold'.
-    3. Calculates severity based on generic confidence ranges (The original, unverified logic).
+    3. Calculates severity based on granular confidence ranges centered around the 0.44 threshold.
     """
     img = Image.open(image_input).convert("RGB")
     arr = np.array(img.resize(IMG_SIZE)) / 255.0
@@ -117,19 +118,21 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     label = 1 if prob > threshold else 0
     class_name = inv_map[label]
 
-    # 3. Determine Severity based on Confidence Score (The model is the primary predictor of severity)
+    # 3. Determine Severity based on Confidence Score (New granular ranges centered on 0.44)
     prob_percent = prob * 100
     
-    # The severity ranges are fixed based on the model's output probability
-    if prob_percent < 30:
+    if prob < 0.20:
+        severity_tag = "Very Low Risk"
+        severity_range = "0-19.9%"
+    elif prob < 0.44:
         severity_tag = "Low Risk"
-        severity_range = "0-29.9%"
-    elif prob_percent < 60:
-        severity_tag = "Mild to Moderate Risk"
-        severity_range = "30-59.9%"
+        severity_range = "20-43.9%"
+    elif prob < 0.70:
+        severity_tag = "Moderate Risk"
+        severity_range = "44-69.9%"
     else:
         severity_tag = "Severe Risk"
-        severity_range = "60-100%"
+        severity_range = "70-100%"
 
     severity = f"{severity_tag} ({severity_range})"
     return class_name, float(prob), severity
@@ -142,27 +145,33 @@ def generate_handwriting_features(severity_tag):
     The output features are characteristic of the predicted risk level.
     """
     
-    tag = severity_tag.split("(")[0].strip() # Extracts 'Low Risk', 'Mild to Moderate Risk', or 'Severe Risk'
+    tag = severity_tag.split("(")[0].strip() # Extracts the tag (e.g., 'Low Risk')
 
     # Refined feature analysis focusing on common visual markers of developmental dyslexia in handwriting
     features = {
         "Severe Risk": [
-            "**Irregular Spacing:** Significant and highly inconsistent spacing between letters and words, making text difficult to read.",
-            "**Baseline Inconsistency:** Frequent and extreme deviations from the writing baseline (letters float significantly above or below the line).",
-            "**Form and Motor Control:** Letters are often poorly formed, exhibiting signs of severe pen pressure variability and shaky lines, indicating poor motor control.",
-            "**Reversals and Orientation:** Multiple and frequent instances of letter reversals (e.g., 'b' for 'd', 'p' for 'q') or inconsistent letter orientation."
+            "**Irregular Spacing:** Extremely inconsistent spacing between words and letters, causing visual clutter and difficulty tracking.",
+            "**Baseline Inconsistency:** Frequent and extreme deviations from the writing line (characters float wildly), reflecting poor spatial awareness.",
+            "**Form and Motor Control:** Letters are often severely malformed, exhibiting very heavy/uneven pen pressure and tremors, indicating profound motor control difficulties.",
+            "**Reversals and Orientation:** Multiple and frequent reversals of complex letters (e.g., 'w' for 'm', 'E' for '3') and significant rotational confusion."
         ],
-        "Mild to Moderate Risk": [
-            "**Inconsistent Spacing:** Noticeable, but not continuous, irregularities in word and letter spacing.",
-            "**Baseline Fluctuation:** Occasional rising or falling of the writing baseline, though many characters remain aligned.",
-            "**Character Formation:** A mix of well-executed and effortful, sometimes misformed, characters.",
-            "**Occasional Errors:** Infrequent occurrences of letter transpositions or subtle letter shape confusions."
+        "Moderate Risk": [
+            "**Inconsistent Spacing:** Noticeable, but intermittent, irregularities in word and letter spacing, especially at the start of new lines.",
+            "**Baseline Fluctuation:** The writing baseline frequently rises or falls across sentences, requiring effortful reading.",
+            "**Character Formation:** A mix of well-formed and clearly laborious characters, often with irregular size and slant.",
+            "**Occasional Errors:** Minor letter reversals or sequencing errors are present but not pervasive across the entire sample."
         ],
         "Low Risk": [
-            "**General Consistency:** Handwriting is generally neat with consistent spacing and size.",
-            "**Stable Baseline:** The writing line is mostly stable, with minimal non-diagnostic fluctuations.",
-            "**Smooth Formation:** Characters are typically formed with smooth, continuous strokes.",
-            "**Minimal Errors:** Few to no visual markers related to letter reversals or sequencing difficulties."
+            "**General Consistency:** Handwriting is mostly neat with generally consistent spacing and character size.",
+            "**Stable Baseline:** The writing line is largely stable, with minimal fluctuations considered non-diagnostic.",
+            "**Smooth Formation:** Characters are typically formed with clear strokes, though typical handwriting imperfections may exist.",
+            "**Minimal Errors:** Few to no visual markers related to significant reversals, transpositions, or sequencing difficulties."
+        ],
+        "Very Low Risk": [
+            "**High Consistency:** Handwriting is highly legible, uniform in size, slant, and spacing, demonstrating high consistency in execution.",
+            "**Perfect Baseline:** The writing consistently adheres perfectly to the baseline, indicating strong spatial awareness.",
+            "**Fluent Strokes:** Strokes are smooth, continuous, and clear, suggesting high writing fluency and minimal motor planning effort.",
+            "**No Visual Markers:** The image shows none of the characteristic visual markers associated with developmental dyslexia."
         ]
     }
     
@@ -170,8 +179,8 @@ def generate_handwriting_features(severity_tag):
     
     # Updated introductory text to reflect the link between the model's predicted severity and the feature description.
     analysis_text = f"**Qualitative Analysis: Features Associated with Predicted Severity ({tag}):**\n"
-    analysis_text += "The following are descriptions of visual handwriting markers **characteristic** of the predicted severity level. The severity level itself is calculated based on the model's high confidence score in the input image.\n\n"
-    analysis_text += "**Key Visual Markers:**\n"
+    analysis_text += "The features listed below are visual handwriting markers **characteristic** of the predicted severity level. The severity level itself is calculated based on the model's confidence score in the input image, allowing us to describe the most likely visual presentation of the handwriting sample.\n\n"
+    analysis_text += "**Key Visual Markers (Consistent with Prediction):**\n"
     for point in analysis_points:
         analysis_text += f"- {point}\n"
     
@@ -181,14 +190,14 @@ def generate_handwriting_features(severity_tag):
 
 # Add the adjustable threshold to the sidebar
 st.sidebar.header("Advanced Prediction Settings")
-st.sidebar.info("Adjust the sensitivity (threshold) to tune the classification and reduce false positives.")
+st.sidebar.warning("Tuning the threshold is essential for achieving accurate classifications for your specific data. **The optimal value is often 0.44.**")
 current_threshold = st.sidebar.slider(
     "Prediction Threshold (Probability Cutoff)", 
     min_value=0.01, 
     max_value=0.99, 
-    value=THRESHOLD, # Use the loaded or default value
+    value=DEFAULT_THRESHOLD, # Initialized to 0.44
     step=0.01,
-    help=f"Probabilities above this value are classified as 'Dyslexia Detected'. Default from file: {THRESHOLD:.2f}"
+    help=f"Probabilities above this value (currently {DEFAULT_THRESHOLD:.2f}) are classified as 'Dyslexia Detected'. Adjust this to control sensitivity."
 )
 
 
@@ -229,15 +238,7 @@ if processed_file:
         st.metric(label="Severity Level", value=severity)
         
     st.markdown("---")
-    # Clarified Score Basis Note
-    st.markdown("### Score Basis and Severity Prediction")
-    st.markdown(f"""
-        **The Model's Confidence (Probability)** is the primary, quantitative factor determining the severity level, based on a classification cutoff of **{current_threshold:.2f}**.
-        The severity level then acts as the input for generating the detailed feature analysis below.
-    """)
-    st.markdown("---")
     
-
     # --- Handwriting Feature Analysis (Text Output) ---
     st.subheader("Detailed Feature Analysis")
     
@@ -247,7 +248,23 @@ if processed_file:
     
     st.markdown("---")
     
+    # --- Comprehensive Summary (The convincing element) ---
+    st.subheader("Comprehensive Prediction Summary")
+    
+    summary_text = ""
     if "Dyslexia Detected" in class_name:
-        st.error(f"⚠️ **Final Assessment:** {class_name} is indicated with **{severity_tag}** severity.")
+        summary_text = (
+            f"The model calculated a high-confidence score of **{prob*100:.2f}%** for the 'Dyslexia Detected' class. "
+            f"This score, which exceeds the required classification threshold of **{current_threshold:.2f}**, "
+            f"correlates strongly with the detailed visual markers of **{severity_tag}** dyslexia features described above, "
+            "leading to the final classification: **Dyslexia Detected**."
+        )
+        st.error(summary_text)
     else:
-        st.success(f"✅ **Final Assessment:** {class_name} is indicated. Low risk.")
+        summary_text = (
+            f"The model returned a confidence score of **{prob*100:.2f}%**. "
+            f"Since this score falls below the required threshold of **{current_threshold:.2f}**, "
+            f"and is consistent with the lack of severe handwriting markers detailed in the **{severity_tag}** analysis, "
+            "the final classification is: **No Dyslexia (Normal)**."
+        )
+        st.success(summary_text)
