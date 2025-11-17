@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
-import tensorflow as tf
+import tflite_runtime.interpreter as tflite
 
 # --------------------------
 # Config
@@ -14,7 +14,7 @@ TFLITE_MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.tflite"
 # --------------------------
 @st.cache_resource
 def load_tflite_model():
-    interpreter = tf.lite.Interpreter(model_path=TFLITE_MODEL_PATH)
+    interpreter = tflite.Interpreter(model_path=TFLITE_MODEL_PATH)
     interpreter.allocate_tensors()
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
@@ -29,7 +29,6 @@ st.title("Dyslexia Detection Using TFLite Model")
 uploaded_file = st.file_uploader("Upload a child’s handwriting or image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file:
-    # Display uploaded image
     image = Image.open(uploaded_file)
     st.image(image, caption="Uploaded Image", use_column_width=True)
 
@@ -38,15 +37,12 @@ if uploaded_file:
     img_array = np.array(img) / 255.0
     img_array = np.expand_dims(img_array, axis=0).astype(np.float32)
 
-    # Set TFLite input
+    # Predict
     interpreter.set_tensor(input_details[0]['index'], img_array)
     interpreter.invoke()
     prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
 
-    # Calculate confidence
     confidence = float(prediction) * 100
-
-    # Binary Prediction
     pred_label = "Dyslexic" if prediction >= 0.5 else "Normal"
 
     # Severity
@@ -59,7 +55,6 @@ if uploaded_file:
     else:
         severity = "Severe (>70)"
 
-    # Display results
     st.subheader("Prediction Results")
     st.write(f"**Prediction:** {pred_label}")
     st.write(f"**Confidence:** {confidence:.2f}%")
