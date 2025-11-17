@@ -12,7 +12,7 @@ import os
 
 # Define Paths (MUST match files in your local 'models/' directory)
 MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5"
-CLASS_MAP_PATH = "models/class_indices_best.pkl"
+CLASS_MAP_PATH = "models/class_indices.pkl"
 THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
 
@@ -121,15 +121,15 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     # 3. Determine Severity based on Confidence Score (New granular ranges centered on 0.44)
     prob_percent = prob * 100
     
-    if prob < 0.20:
+    if prob < 0.10:
         severity_tag = "Very Low Risk"
-        severity_range = "0-19.9%"
-    elif prob < 0.44:
+        severity_range = "0-10%"
+    elif prob < 0.30:
         severity_tag = "Low Risk"
-        severity_range = "20-43.9%"
+        severity_range = "11-30%"
     elif prob < 0.70:
         severity_tag = "Moderate Risk"
-        severity_range = "44-69.9%"
+        severity_range = "31-69.9%"
     else:
         severity_tag = "Severe Risk"
         severity_range = "70-100%"
@@ -258,13 +258,13 @@ if processed_file:
         summary_text = (
             f"The model's confidence score of **{prob*100:.2f}%** decisively **exceeds** the classification threshold of **{current_threshold:.2f}**. "
             f"This robust quantitative result is strongly reinforced by the detailed feature analysis, which identifies specific visual markers characteristic of **{severity_tag}** risk. "
-            "Based on both data and feature correlation, the classification is affirmed as **Dyslexia Detected**."
+            "This combined evidence supports the final prediction presented in the results section above." # Removed final classification
         )
         st.error(summary_text)
     else:
         summary_text = (
             f"The model's calculated confidence score of **{prob*100:.2f}%** clearly **falls below** the classification threshold of **{current_threshold:.2f}**. "
             f"This quantitative result, paired with the detailed analysis showing the absence or mild manifestation of severe dyslexic features (consistent with **{severity_tag}**), "
-            "confirms the final classification: **No Dyslexia (Normal)**."
+            "This combined evidence supports the final prediction presented in the results section above." # Removed final classification
         )
         st.success(summary_text)
