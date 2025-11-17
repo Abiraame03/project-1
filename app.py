@@ -2,15 +2,16 @@ import streamlit as st
 import numpy as np
 from PIL import Image
 import tflite_runtime.interpreter as tflite
+import time
 
 # --------------------------
 # Config
 # --------------------------
-IMG_SIZE = (160, 160)  # input image size
+IMG_SIZE = (160, 160)  # Input image size
 TFLITE_MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.tflite"
 
 # --------------------------
-# Load TFLite model
+# Load TFLite model (cached)
 # --------------------------
 @st.cache_resource
 def load_tflite_model():
@@ -25,37 +26,46 @@ interpreter, input_details, output_details = load_tflite_model()
 # --------------------------
 # Streamlit UI
 # --------------------------
-st.title("Dyslexia Detection Using TFLite Model")
+st.set_page_config(page_title="Dyslexia Detection", page_icon="🧠", layout="centered")
+st.title("🧠 Dyslexia Detection from Handwriting")
+
 uploaded_file = st.file_uploader("Upload a child’s handwriting or image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file:
-    image = Image.open(uploaded_file)
+    image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    # Preprocess image
-    img = image.resize(IMG_SIZE)
-    img_array = np.array(img) / 255.0
-    img_array = np.expand_dims(img_array, axis=0).astype(np.float32)
+    if st.button("Predict"):
+        with st.spinner("Analyzing..."):
+            # Preprocess image
+            img = image.resize(IMG_SIZE)
+            img_array = np.array(img) / 255.0
+            img_array = np.expand_dims(img_array, axis=0).astype(np.float32)
 
-    # Predict
-    interpreter.set_tensor(input_details[0]['index'], img_array)
-    interpreter.invoke()
-    prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
+            # TFLite prediction
+            interpreter.set_tensor(input_details[0]['index'], img_array)
+            interpreter.invoke()
+            prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
 
-    confidence = float(prediction) * 100
-    pred_label = "Dyslexic" if prediction >= 0.5 else "Normal"
+            confidence = float(prediction) * 100
+            pred_label = "Dyslexic" if prediction >= 0.5 else "Normal"
 
-    # Severity
-    if confidence < 5:
-        severity = "Normal (0)"
-    elif 5 <= confidence < 30:
-        severity = "Mild (5-30)"
-    elif 30 <= confidence <= 70:
-        severity = "Moderate (30-70)"
-    else:
-        severity = "Severe (>70)"
+            # Severity
+            if confidence < 5:
+                severity = "Normal (0)"
+            elif 5 <= confidence < 30:
+                severity = "Mild (5-30)"
+            elif 30 <= confidence <= 70:
+                severity = "Moderate (30-70)"
+            else:
+                severity = "Severe (>70)"
 
-    st.subheader("Prediction Results")
-    st.write(f"**Prediction:** {pred_label}")
-    st.write(f"**Confidence:** {confidence:.2f}%")
-    st.write(f"**Severity:** {severity}")
+            # Display results
+            st.success("✅ Prediction Completed!")
+            st.subheader("Prediction Results")
+            st.write(f"**Prediction:** {pred_label}")
+            st.write(f"**Confidence:** {confidence:.2f}%")
+            st.write(f"**Severity:** {severity}")
+
+        # Optional: Show confidence bar
+        st.progress(min(int(confidence), 100))
