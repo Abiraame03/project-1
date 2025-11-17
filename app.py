@@ -1,107 +1,62 @@
 import streamlit as st
-import cv2
-import numpy as np
 from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.image import img_to_array
+from PIL import Image
+import numpy as np
 import pickle
 import json
-from PIL import Image
 import pyttsx3
-import tempfile
 
-# ===========================================
-# Config
-# ===========================================
-MODEL_PATH = "mobilenetv2_bilstm_best_thr_044.h5"
-CLASS_MAP_PATH = "class_indices_best.pkl"
-THRESHOLD_PATH = "best_threshold.json"
+# Page setup
+st.set_page_config(page_title="Dyslexia Detection", layout="centered")
+st.title("Dyslexia Detection System 🧠")
 
-IMG_SIZE = (160, 160)  # Must match training
+# Initialize TTS engine
+engine = pyttsx3.init()
 
-# Severity mapping
-severity_levels = {
-    0: "Normal",
-    1: "Mild",
-    2: "Moderate",
-    3: "Severe"
-}
-
-# Abnormal handwriting feedback templates
-feedback_patterns = [
-    "frequent spelling mistakes",
-    "irregular stroke formation",
-    "uneven spacing between letters",
-    "inconsistent letter sizes",
-    "mirror writing or reversed letters"
-]
-
-# ===========================================
-# Load model and thresholds
-# ===========================================
+# --- Load Models and resources ---
 @st.cache_resource
 def load_resources():
-    model = load_model(MODEL_PATH)
-    with open(CLASS_MAP_PATH, 'rb') as f:
-        class_map = pickle.load(f)
-    with open(THRESHOLD_PATH, 'r') as f:
+    model = load_model("models/mobilenetv2_bilstm_best_thr_044.h5")
+    
+    with open("models/class_indices_best.pkl", "rb") as f:
+        class_indices = pickle.load(f)
+
+    with open("models/best_threshold.json", "r") as f:
         thresholds = json.load(f)
-    return model, class_map, thresholds
 
-model, class_map, thresholds = load_resources()
+    return model, class_indices, thresholds
 
-# ===========================================
-# Text-to-speech
-# ===========================================
-engine = pyttsx3.init(driverName='espeak')  # Linux-friendly
+model, class_indices, thresholds = load_resources()
 
-def speak(text):
-    engine.say(text)
+# --- File uploader ---
+uploaded_file = st.file_uploader("Upload sentence image (png/jpg)", type=["png", "jpg", "jpeg"])
+
+if uploaded_file is not None:
+    image = Image.open(uploaded_file).convert("RGB")
+    st.image(image, caption="Uploaded Image", use_column_width=True)
+
+    # Preprocess image
+    img_array = img_to_array(image.resize((128,128))) / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
+
+    # Predict
+    pred_probs = model.predict(img_array)[0]
+    pred_idx = int(np.argmax(pred_probs))
+    pred_class = class_indices[pred_idx]
+    confidence = float(pred_probs[pred_idx]) * 100
+
+    # Determine severity based on threshold
+    threshold = thresholds.get(pred_class, 0.5)
+    severity = "Low"
+    if confidence > threshold*100 + 20:
+        severity = "High"
+    elif confidence > threshold*100:
+        severity = "Medium"
+
+    st.success(f"Prediction: **{pred_class}** ({confidence:.2f}% confidence)")
+    st.info(f"Dyslexia Severity: **{severity}**")
+
+    # Speak result
+    engine.say(f"The system predicts {pred_class} with {confidence:.2f} percent confidence. Severity: {severity}")
     engine.runAndWait()
-
-# ===========================================
-# Streamlit UI
-# ===========================================
-st.title("📖 Dyslexia Detection in 6-Year-Old Children")
-st.write("Capture handwriting via camera and get severity assessment with feedback.")
-
-# Camera input
-stframe = st.empty()
-cap = cv2.VideoCapture(0)  # Use default camera
-
-run = st.button("Capture Image")
-
-if run:
-    ret, frame = cap.read()
-    if ret:
-        st.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB")
-        # Save temporarily
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-        cv2.imwrite(temp_file.name, frame)
-
-        # Preprocess
-        img = Image.open(temp_file.name).convert('RGB')
-        img = img.resize(IMG_SIZE)
-        img_array = np.array(img) / 255.0
-        img_array = np.expand_dims(img_array, axis=0)
-
-        # Prediction
-        pred_probs = model.predict(img_array)[0]
-        class_idx = np.argmax(pred_probs)
-        class_name = class_map[class_idx]
-        pred_score = pred_probs[class_idx]
-
-        # Apply threshold
-        threshold = thresholds.get(class_name, 0.5)
-        if pred_score >= threshold:
-            severity = severity_levels.get(class_idx, "Unknown")
-        else:
-            severity = "Normal"
-
-        # Feedback
-        feedback = ", ".join(np.random.choice(feedback_patterns, 2, replace=False))
-        result_text = f"Predicted Class: {class_name}\nSeverity Level: {severity}\nObserved Patterns: {feedback}"
-        
-        st.success(result_text)
-        speak(f"The child's handwriting shows {feedback}. Severity level is {severity}.")
-
-# Release camera
-cap.release()
