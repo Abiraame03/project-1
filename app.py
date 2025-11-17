@@ -17,12 +17,12 @@ THRESHOLD_PATH = "models/best_threshold.json"
 IMG_SIZE = (160, 160)
 
 # Default values used only if real files are not loaded (Simulation Mode)
-DEFAULT_THRESHOLD = 0.44
+DEFAULT_THRESHOLD = 0.5
 DEFAULT_INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
 st.header("Dyslexia Detection & Severity Prediction")
-st.markdown("⚠️ **ACTION REQUIRED:** To get stable, correct predictions, please ensure your model files are in a local 'models/' directory.")
+st.markdown(" Model files are in a local 'models/' directory.")
 
 # --- II. Model Loading and Environment Check ---
 
@@ -36,8 +36,10 @@ def load_model_and_metadata():
     threshold = DEFAULT_THRESHOLD
     inv_map = DEFAULT_INV_MAP
     
-    # Check if all required files exist
-    if all(os.path.exists(p) for p in [MODEL_PATH, CLASS_MAP_PATH, THRESHOLD_PATH]):
+    required_files = [MODEL_PATH, CLASS_MAP_PATH, THRESHOLD_PATH]
+    all_files_exist = all(os.path.exists(p) for p in required_files)
+    
+    if all_files_exist:
         
         # --- PRODUCTION MODE LOADING ---
         try:
@@ -61,11 +63,17 @@ def load_model_and_metadata():
             
         except Exception as e:
             # Fall through to simulation if loading fails
-            st.error(f"❌ Failed to load real model files. Check dependencies (h5py) and file integrity. Error: {e}")
+            st.error(f"❌ Failed to load real model files. Check dependencies (h5py, tensorflow) and file integrity. Error: {e}")
             pass 
     
     # --- SIMULATION FALLBACK ---
-    st.warning(f"Predictions are also simulated")
+    missing_files = [p for p in required_files if not os.path.exists(p)]
+    if missing_files:
+        st.warning(f"**Simulation Mode:** Model files not found. Missing: {', '.join(missing_files)}. Predictions are also simulated.")
+    else:
+         # Should not happen if all_files_exist is false, but covers edge cases
+        st.warning(f"Predictions are also simulated")
+        
     return ml_model, inv_map, threshold
 
 model, INV_MAP, THRESHOLD = load_model_and_metadata()
@@ -85,11 +93,21 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     # 1. Get Prediction Probability (Confidence Score)
     if ml_model is not None:
         # PRODUCTION: Use the real model's prediction
-        prob = float(ml_model.predict(arr)[0][0])
+        # Ensure the model output shape is correct (e.g., [0][0] for binary classification)
+        try:
+            prediction_output = ml_model.predict(arr)
+            prob = float(prediction_output[0][0])
+        except Exception as e:
+            st.error(f"Error during model prediction: {e}. Falling back to simulation for this prediction.")
+            # Use a random seed for prediction fallback if real model errors
+            seed = int(time.time() * 1000) % 1000
+            random.seed(seed)
+            prob = random.uniform(0.05, 0.95)
     else:
         # SIMULATION: Generate a randomized score (inconsistent results guaranteed)
         try:
             image_input.seek(0)
+            # Use image content hash as seed for deterministic random results for the same image
             seed = hash(image_input.getvalue()) % 1000
         except AttributeError:
             seed = int(time.time() * 1000) % 1000
@@ -104,7 +122,7 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     # 3. Determine Severity based on Confidence Score and UPDATED Ranges
     prob_percent = prob * 100
     
-    # Updated Severity Thresholds (Adjust these values if still misclassifying)
+    # Updated Severity Thresholds (Set by you)
     if prob_percent <= 15:
         severity_tag = "Normal"
         severity_range = "0-15%"
