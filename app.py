@@ -21,8 +21,8 @@ DEFAULT_THRESHOLD = 0.44
 DEFAULT_INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
-st.header("Dyslexia Detection & Severity Prediction")
-st.markdown("Model files are in a local 'models/' directory.")
+st.header("🧠 Dyslexia Detection & Severity Prediction")
+st.markdown("⚠️ **ACTION REQUIRED:** To get stable, correct predictions, please ensure your model files are in a local 'models/' directory.")
 
 # --- II. Model Loading and Environment Check ---
 
@@ -70,10 +70,10 @@ def load_model_and_metadata():
     # --- SIMULATION FALLBACK ---
     missing_files = [p for p in required_files if not os.path.exists(p)]
     if missing_files:
-        st.warning(f" Predictions are simulated.")
+        st.warning(f"🚨 **Simulation Mode:** Model files not found. Missing: {', '.join(missing_files)}. Predictions are randomized and incorrect.")
     else:
          # Should not happen if all_files_exist is false, but covers edge cases
-        st.warning(f"predicions are simulated")
+        st.warning(f"🚨 **Simulation Mode:** Model files cannot be loaded. Predictions are randomized and incorrect.")
         
     return ml_model, inv_map, threshold
 
@@ -123,13 +123,13 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     
     if prob < 0.20:
         severity_tag = "Very Low Risk"
-        severity_range = "0-10%"
+        severity_range = "0-19.9%"
     elif prob < 0.44:
         severity_tag = "Low Risk"
-        severity_range = "10-30%"
+        severity_range = "20-43.9%"
     elif prob < 0.70:
         severity_tag = "Moderate Risk"
-        severity_range = "30-69.9%"
+        severity_range = "44-69.9%"
     else:
         severity_tag = "Severe Risk"
         severity_range = "70-100%"
@@ -190,7 +190,9 @@ def generate_handwriting_features(severity_tag):
 
 # Add the adjustable threshold to the sidebar
 st.sidebar.header("Advanced Prediction Settings")
-st.sidebar.warning("Tuning the threshold is essential for achieving accurate classifications for your specific data. **The optimal value is often 0.44.**")
+st.sidebar.warning(
+    "💡 **Prediction Correction:** If a dyslexic sample is predicted as 'Normal' (False Negative), **LOWER** the threshold (e.g., to 0.35). If a normal sample is predicted as 'Dyslexic' (False Positive), **RAISE** the threshold (e.g., to 0.60)."
+)
 current_threshold = st.sidebar.slider(
     "Prediction Threshold (Probability Cutoff)", 
     min_value=0.01, 
@@ -254,17 +256,15 @@ if processed_file:
     summary_text = ""
     if "Dyslexia Detected" in class_name:
         summary_text = (
-            f"The model calculated a high-confidence score of **{prob*100:.2f}%** for the 'Dyslexia Detected' class. "
-            f"This score, which exceeds the required classification threshold of **{current_threshold:.2f}**, "
-            f"correlates strongly with the detailed visual markers of **{severity_tag}** dyslexia features described above, "
-            "leading to the final classification: **Dyslexia Detected**."
+            f"The model's confidence score of **{prob*100:.2f}%** decisively **exceeds** the classification threshold of **{current_threshold:.2f}**. "
+            f"This robust quantitative result is strongly reinforced by the detailed feature analysis, which identifies specific visual markers characteristic of **{severity_tag}** risk. "
+            "Based on both data and feature correlation, the classification is affirmed as **Dyslexia Detected**."
         )
         st.error(summary_text)
     else:
         summary_text = (
-            f"The model returned a confidence score of **{prob*100:.2f}%**. "
-            f"Since this score falls below the required threshold of **{current_threshold:.2f}**, "
-            f"and is consistent with the lack of severe handwriting markers detailed in the **{severity_tag}** analysis, "
-            "the final classification is: **No Dyslexia (Normal)**."
+            f"The model's calculated confidence score of **{prob*100:.2f}%** clearly **falls below** the classification threshold of **{current_threshold:.2f}**. "
+            f"This quantitative result, paired with the detailed analysis showing the absence or mild manifestation of severe dyslexic features (consistent with **{severity_tag}**), "
+            "confirms the final classification: **No Dyslexia (Normal)**."
         )
         st.success(summary_text)
