@@ -31,7 +31,7 @@ def load_model_and_metadata():
     block below and ensure your 'models/' folder is deployed.
     """
     
-    st.warning(f"🚨 **Simulation Mode:** Model files are not included. Prediction and severity results are simulated. ")
+    st.warning(f"prediction of severity")
 
     # --- SIMULATION VALUES ---
     time.sleep(1) 
