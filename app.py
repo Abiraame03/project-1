@@ -127,21 +127,21 @@ def predict_image(image_input, ml_model, inv_map, threshold):
     # The thresholds are set to align with common diagnostic interpretations of severity distribution.
     prob_percent = prob * 100
     
-    if prob < 0.10:
+    if prob < 0.30:
         severity_tag = "Normal / Very Low Risk"
-        severity_range = "0-10%"
-    elif prob < 0.30:
+        severity_range = "0-29.9%"
+    elif prob < 0.44:
         # Note: This range is still classified as 'No Dyslexia' if threshold is 0.44
         severity_tag = "Low Risk" 
-        severity_range = "11-30%"
-    elif prob < 0.70:
+        severity_range = "30-43.9%"
+    elif prob < 0.65:
         # Note: This range is classified as 'Dyslexia Detected'
         severity_tag = "Moderate Risk" 
-        severity_range = "31-69.9%"
+        severity_range = "44-64.9%"
     else:
         # Note: This range is classified as 'Dyslexia Detected'
         severity_tag = "Severe Risk" 
-        severity_range = "70-100%"
+        severity_range = "65-100%"
 
     severity = f"{severity_tag} ({severity_range})"
     return class_name, float(prob), severity
