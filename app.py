@@ -1,25 +1,31 @@
 import streamlit as st
 import numpy as np
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.image import img_to_array, load_img
+from PIL import Image
+import tensorflow as tf
 
 # --------------------------
 # Config
 # --------------------------
 IMG_SIZE = (160, 160)  # your image input size
-MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5"  # your model
+TFLITE_MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.tflite"  # your TFLite model
 
-# Load model once
+# Load TFLite model once
 @st.cache_resource
-def load_dyslexia_model():
-    return load_model(MODEL_PATH)
+def load_tflite_model(model_path):
+    interpreter = tf.lite.Interpreter(model_path=model_path)
+    interpreter.allocate_tensors()
+    return interpreter
 
-model = load_dyslexia_model()
+interpreter = load_tflite_model(TFLITE_MODEL_PATH)
+
+# Get input & output details
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
 # --------------------------
 # Streamlit UI
 # --------------------------
-st.title("Dyslexia Detection")
+st.title("Dyslexia Detection (TFLite)")
 
 uploaded_file = st.file_uploader("Upload a child’s handwriting or image", type=["png", "jpg", "jpeg"])
 
@@ -28,12 +34,17 @@ if uploaded_file:
     st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
     
     # Preprocess image
-    img = load_img(uploaded_file, target_size=IMG_SIZE)
-    img_array = img_to_array(img) / 255.0  # normalize
+    img = Image.open(uploaded_file).convert("RGB")
+    img = img.resize(IMG_SIZE)
+    img_array = np.array(img, dtype=np.float32) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
     
-    # Prediction
-    prediction = model.predict(img_array)[0][0]
+    # Set the tensor
+    interpreter.set_tensor(input_details[0]['index'], img_array)
+    
+    # Run inference
+    interpreter.invoke()
+    prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
     confidence = float(prediction) * 100
     
     # Binary Prediction
@@ -42,7 +53,7 @@ if uploaded_file:
     else:
         pred_label = "Normal"
     
-    # Severity (based on range)
+    # Severity
     if confidence < 5:
         severity = "Normal (0)"
     elif 5 <= confidence < 30:
