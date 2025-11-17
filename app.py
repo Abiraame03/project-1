@@ -1,62 +1,74 @@
+# =====================================
+# 📦 Streamlit App: Dyslexia Detection
+# =====================================
 import streamlit as st
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.image import img_to_array
-from PIL import Image
 import numpy as np
-import pickle
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.image import img_to_array, load_img
 import json
-import pyttsx3
+import pickle
 
-# Page setup
-st.set_page_config(page_title="Dyslexia Detection", layout="centered")
-st.title("Dyslexia Detection System 🧠")
+# --------------------------
+# Load model & config files
+# --------------------------
+MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5"
+THRESH_PATH = "models/best_threshold.json"
+CLASS_INDICES_PATH = "models/class_indices_best.pkl"
 
-# Initialize TTS engine
-engine = pyttsx3.init()
+model = load_model(MODEL_PATH)
 
-# --- Load Models and resources ---
-@st.cache_resource
-def load_resources():
-    model = load_model("models/mobilenetv2_bilstm_best_thr_044.h5")
-    
-    with open("models/class_indices_best.pkl", "rb") as f:
-        class_indices = pickle.load(f)
+with open(THRESH_PATH, "r") as f:
+    best_threshold = json.load(f).get("threshold", 0.5)  # default 0.5
 
-    with open("models/best_threshold.json", "r") as f:
-        thresholds = json.load(f)
+with open(CLASS_INDICES_PATH, "rb") as f:
+    class_indices = pickle.load(f)
 
-    return model, class_indices, thresholds
+# Reverse class indices for label mapping
+idx_to_class = {v: k for k, v in class_indices.items()}
 
-model, class_indices, thresholds = load_resources()
+# --------------------------
+# App UI
+# --------------------------
+st.title("🧠 Dyslexia Detection from Image")
+st.write("Upload an image of text reading or handwriting sample for analysis.")
 
-# --- File uploader ---
-uploaded_file = st.file_uploader("Upload sentence image (png/jpg)", type=["png", "jpg", "jpeg"])
+uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Uploaded Image", use_column_width=True)
-
+    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+    
+    # --------------------------
     # Preprocess image
-    img_array = img_to_array(image.resize((128,128))) / 255.0
+    # --------------------------
+    img = load_img(uploaded_file, target_size=(128, 128))  # match model input
+    img_array = img_to_array(img) / 255.0
     img_array = np.expand_dims(img_array, axis=0)
-
-    # Predict
-    pred_probs = model.predict(img_array)[0]
-    pred_idx = int(np.argmax(pred_probs))
-    pred_class = class_indices[pred_idx]
-    confidence = float(pred_probs[pred_idx]) * 100
-
-    # Determine severity based on threshold
-    threshold = thresholds.get(pred_class, 0.5)
-    severity = "Low"
-    if confidence > threshold*100 + 20:
-        severity = "High"
-    elif confidence > threshold*100:
-        severity = "Medium"
-
-    st.success(f"Prediction: **{pred_class}** ({confidence:.2f}% confidence)")
-    st.info(f"Dyslexia Severity: **{severity}**")
-
-    # Speak result
-    engine.say(f"The system predicts {pred_class} with {confidence:.2f} percent confidence. Severity: {severity}")
-    engine.runAndWait()
+    
+    # --------------------------
+    # Prediction
+    # --------------------------
+    pred_prob = model.predict(img_array)[0][0]  # binary output
+    confidence = float(pred_prob) if pred_prob >= 0 else 1 + float(pred_prob)
+    
+    prediction = "Dyslexic" if pred_prob >= best_threshold else "Normal"
+    
+    # --------------------------
+    # Severity calculation
+    # --------------------------
+    # Use confidence (%) to determine severity
+    confidence_percent = confidence * 100
+    if prediction == "Normal":
+        severity = "Normal (0)"
+    elif confidence_percent <= 30:
+        severity = "Mild (5-30)"
+    elif confidence_percent <= 70:
+        severity = "Moderate (30-70)"
+    else:
+        severity = "Severe (>70)"
+    
+    # --------------------------
+    # Display results
+    # --------------------------
+    st.markdown(f"**Prediction:** {prediction}")
+    st.markdown(f"**Confidence:** {confidence_percent:.2f}%")
+    st.markdown(f"**Severity:** {severity}")
