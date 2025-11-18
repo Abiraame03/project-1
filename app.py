@@ -274,7 +274,7 @@ if processed_file:
             st.metric(label="Dyslexia Risk", value=f"{dyslexia_risk:.2f}%")
         
         st.markdown("---")
-        st.subheader("Justification and Feature Analysis")
+        st.subheader("Handwriting Feature Analysis")
         
         # Comprehensive Justreiification
         st.error(
