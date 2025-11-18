@@ -259,7 +259,7 @@ if processed_file:
         
     else:
         # Case 2: DYSLEXIC MARKER DETECTED (Predicted Class is Dyslexic)
-        st.error("## 🔴 DYSLEXIC MARKER DETECTED")
+        st.error("## 🔴 DYSLEXIA DETECTED")
         st.warning(f"The model detected a high risk, classifying the sample as **{class_label}**.")
 
         col1, col2, col3 = st.columns(3)
