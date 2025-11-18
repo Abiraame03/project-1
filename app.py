@@ -22,7 +22,7 @@ CLASS_LABELS = ["Non-dyslexic", "Dyslexic"]
 # Severity labels are used to categorize the confidence score.
 SEVERITY_LABELS = ["Mild", "Moderate", "Severe"]
 
-DEFAULT_THRESHOLD = 0.44
+DEFAULT_THRESHOLD = 0.51
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
 st.header("Dyslexia Detection & Severity Prediction")
