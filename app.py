@@ -23,7 +23,7 @@ CLASS_LABELS = ["Non-dyslexic", "Dyslexic"]
 SEVERITY_LABELS = ["Mild", "Moderate", "Severe"]
 
 # Default prediction threshold for binary classification
-DEFAULT_THRESHOLD = 0.5
+DEFAULT_THRESHOLD = 0.51
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
 st.header("Dyslexia Detection & Severity Prediction")
