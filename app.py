@@ -12,7 +12,7 @@ import os
 
 # Define Paths (MUST match files in your local 'models/' directory)
 # NOTE: Model is assumed to have a single output (probability of Dyslexia).
-MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5" 
+MODEL_PATH = "models/mobilenetv2_bilstm_final.h5" 
 CLASS_MAP_PATH = "models/class_indices_best.pkl"
 THRESHOLD_PATH = "models/best_threshold.json" 
 IMG_SIZE = (160, 160)
@@ -22,12 +22,14 @@ CLASS_LABELS = ["Non-dyslexic", "Dyslexic"]
 # Severity labels are used to categorize the confidence score.
 SEVERITY_LABELS = ["Mild", "Moderate", "Severe"]
 
-DEFAULT_THRESHOLD = 0.51
+# Default prediction threshold for binary classification
+DEFAULT_THRESHOLD = 0.5
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
-st.header("Dyslexia Detection & Severity Prediction")
-st.markdown("This application is configured for a Binary (Dyslexic/Non-dyslexic) Model. Severity and Risk are derived from the single confidence score.")
+st.header("🧠 Dyslexia Detection & Severity Prediction")
+st.markdown("⚠️ **NOTE:** This application is configured for a **Binary (Dyslexic/Non-dyslexic) Model**. Severity and Risk are derived from the single confidence score. If predictions are consistently wrong, check your model calibration or adjust the `DEFAULT_THRESHOLD` of 0.5.")
 
+# --- II. Model Loading and Environment Check ---
 
 @st.cache_resource
 def load_model_and_metadata():
@@ -62,9 +64,9 @@ def load_model_and_metadata():
     if ml_model is None:
         missing_files = [p for p in required_files if not os.path.exists(p)]
         if missing_files:
-             st.warning(f" Predictions are simulated.")
+             st.warning(f"🚨 **Simulation Mode:** Model file not found. Missing: {', '.join(missing_files)}. Predictions are randomized.")
         else:
-             st.warning("Predictions are simulated.")
+             st.warning("🚨 **Simulation Mode:** Model loading failed. Predictions are randomized.")
         
     return ml_model, True # True means it IS simulation
 
@@ -102,8 +104,13 @@ def predict_image(image_input, ml_model, is_simulation):
             is_simulation = True
     
     if is_simulation:
-        # SIMULATION: Generate a randomized score between 0.05 and 0.95
-        prob = random.uniform(0.05, 0.95)
+        # FIX: Ensure a balanced 50/50 split around 0.5 in simulation mode to test both outcomes reliably.
+        if random.choice([True, False]):
+             # Generate low score (Non-dyslexic prediction)
+             prob = random.uniform(0.05, 0.49)
+        else:
+             # Generate high score (Dyslexic prediction)
+             prob = random.uniform(0.51, 0.95)
         
     # --- Process Model Outputs ---
     
@@ -121,13 +128,13 @@ def predict_image(image_input, ml_model, is_simulation):
 
     # 2. Derived Severity Mapping (based on prob of Dyslexic)
     # Define custom ranges for severity:
-    if prob <= 0.10:
+    if prob <= 0.25:
         severity_label = "Low Risk"
-    elif prob <= 0.30:
+    elif prob <= 0.55:
         severity_label = "Mild Risk"
-    elif prob <= 0.70:
+    elif prob <= 0.75:
         severity_label = "Moderate Risk"
-    else: 
+    else: # prob > 0.75
         severity_label = "Severe Risk"
     
     # 3. Dyslexia Risk Percentage (is the raw Dyslexic probability)
@@ -252,7 +259,7 @@ if processed_file:
         
     else:
         # Case 2: DYSLEXIC MARKER DETECTED (Predicted Class is Dyslexic)
-        st.error("## 🔴 DYSLEXIA DETECTED")
+        st.error("## 🔴 DYSLEXIC MARKER DETECTED")
         st.warning(f"The model detected a high risk, classifying the sample as **{class_label}**.")
 
         col1, col2, col3 = st.columns(3)
@@ -269,7 +276,7 @@ if processed_file:
         st.markdown("---")
         st.subheader("Justification and Feature Analysis")
         
-        # Comprehensive Justification
+        # Comprehensive Justreiification
         st.error(
             f"**Dyslexia Detection Justification:**\n\n"
             f"**Quantitative Evidence:** The model's classification is **{class_label}** with a confidence of **{class_confidence:.2f}%**. The cumulative Dyslexia Risk is **{dyslexia_risk:.2f}%**, indicating a high probability of developmental markers. This high risk calculation confirms the condition's presence.\n\n"
