@@ -244,15 +244,15 @@ if processed_file:
         col1, col2 = st.columns([1, 2])
         with col1:
             # Predicted Class will be Non-dyslexic (X.XX%)
-            st.metric(label="Predicted Class", value=f"**{class_label}** ({class_confidence:.2f}%)")
+            st.metric(label="Predicted Class", value=f"{class_label} ({class_confidence:.2f}%)")
         with col2:
             # Dyslexia Risk is the probability of the *other* class
-            st.metric(label="Dyslexia Risk", value=f"**{dyslexia_risk:.2f}%**")
+            st.metric(label="Dyslexia Risk", value=f"{dyslexia_risk:.2f}%")
             
         st.markdown("---")
         st.subheader("Justification and Feature Analysis")
         st.success(
-            f"**Conclusion:** The handwriting features align with a **{severity_label}** profile. The low calculated risk of **{dyslexia_risk:.2f}%** strongly supports the primary classification of **Non-dyslexic**."
+            f"**Conclusion:** The handwriting features align with a {severity_label} profile. The low calculated risk of {dyslexia_risk:.2f}% strongly supports the primary classification of **Non-dyslexic**."
         )
         # Use "Low Risk" to pull the non-dyslexic feature list
         st.markdown(generate_handwriting_features("Low Risk"))
@@ -260,18 +260,18 @@ if processed_file:
     else:
         # Case 2: DYSLEXIC MARKER DETECTED (Predicted Class is Dyslexic)
         st.error("## 🔴 DYSLEXIA DETECTED")
-        st.warning(f"The model detected a high risk, classifying the sample as **{class_label}**.")
+        st.warning(f"The model detected a high risk, classifying the sample as {class_label}.")
 
         col1, col2, col3 = st.columns(3)
         with col1:
             # Predicted Class will be Dyslexic (X.XX%)
-            st.metric(label="Predicted Class", value=f"**{class_label}** ({class_confidence:.2f}%)")
+            st.metric(label="Predicted Class", value=f"{class_label} ({class_confidence:.2f}%)")
         with col2:
             # Predicted Severity is the derived risk category
-            st.metric(label="Predicted Risk Category", value=f"**{severity_label}**")
+            st.metric(label="Predicted Risk Category", value=f"{severity_label}")
         with col3:
             # Dyslexia Risk is the raw probability of the Dyslexic class
-            st.metric(label="Dyslexia Risk", value=f"**{dyslexia_risk:.2f}%**")
+            st.metric(label="Dyslexia Risk", value=f"{dyslexia_risk:.2f}%")
         
         st.markdown("---")
         st.subheader("Justification and Feature Analysis")
