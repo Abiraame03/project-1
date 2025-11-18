@@ -12,7 +12,7 @@ import os
 
 # Define Paths (MUST match files in your local 'models/' directory)
 # NOTE: Model is assumed to have a single output (probability of Dyslexia).
-MODEL_PATH = "models/mobilenetv2_bilstm_final.h5" 
+MODEL_PATH = "models/mobilenetv2_bilstm_best_thr_044.h5" 
 CLASS_MAP_PATH = "models/class_indices_best.pkl"
 THRESHOLD_PATH = "models/best_threshold.json" 
 IMG_SIZE = (160, 160)
