@@ -11,32 +11,35 @@ import os
 # --- I. Configuration and Setup ---
 
 # Define Paths (MUST match files in your local 'models/' directory)
-MODEL_PATH = "models/mobilenetv2_bilstm_final.h5"
+# NOTE: Model is assumed to have a single output (probability of Dyslexia).
+MODEL_PATH = "models/mobilenetv2_bilstm_final.h5" 
 CLASS_MAP_PATH = "models/class_indices_best.pkl"
-THRESHOLD_PATH = "models/best_threshold.json"
+THRESHOLD_PATH = "models/best_threshold.json" 
 IMG_SIZE = (160, 160)
 
-# Default values set to the user-requested optimal threshold
-DEFAULT_THRESHOLD = 0.51
-DEFAULT_INV_MAP = {0: "No Dyslexia (Normal)", 1: "Dyslexia Detected"}
+# Custom Labels based on the user's model output (Binary)
+CLASS_LABELS = ["Non-dyslexic", "Dyslexic"]
+# Severity labels are used to categorize the confidence score.
+SEVERITY_LABELS = ["Mild", "Moderate", "Severe"]
+
+# Default prediction threshold for binary classification
+DEFAULT_THRESHOLD = 0.5
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
-st.header("Dyslexia Detection & Severity Prediction")
-st.markdown("Model files are in a local 'models/' directory.")
+st.header("🧠 Dyslexia Detection & Severity Prediction")
+st.markdown("⚠️ **NOTE:** This application is configured for a **Binary (Dyslexic/Non-dyslexic) Model**. Severity and Risk are derived from the single confidence score.")
 
 # --- II. Model Loading and Environment Check ---
 
 @st.cache_resource
 def load_model_and_metadata():
     """
-    Attempts to load the real ML model and metadata files. 
+    Attempts to load the real ML model. 
     Falls back to simulation mode if files are not found or loading fails.
     """
     ml_model = None
-    threshold = DEFAULT_THRESHOLD
-    inv_map = DEFAULT_INV_MAP
     
-    required_files = [MODEL_PATH, CLASS_MAP_PATH, THRESHOLD_PATH]
+    required_files = [MODEL_PATH]
     all_files_exist = all(os.path.exists(p) for p in required_files)
     
     if all_files_exist:
@@ -46,170 +49,156 @@ def load_model_and_metadata():
             st.info("Attempting to load real model files for Production Mode...")
             time.sleep(1) 
             
-            # 1. Load the Keras/TensorFlow model
+            # 1. Load the Keras/TensorFlow model (expected to have one output)
             ml_model = tf.keras.models.load_model(MODEL_PATH)
-            
-            # 2. Load the class indices map
-            with open(CLASS_MAP_PATH, "rb") as f:
-                class_indices = pickle.load(f)
-            inv_map = {v: k for k, v in class_indices.items()}
-            
-            # 3. Load the best prediction threshold
-            with open(THRESHOLD_PATH, "r") as f:
-                # Use the threshold stored in the file, which should be 0.44
-                threshold = json.load(f)["threshold"]
                 
-            st.success("✅ **Production Mode:** Real model loaded successfully. Predictions will be accurate.")
-            return ml_model, inv_map, threshold
+            st.success("✅ **Production Mode:** Real model loaded successfully. Predictions will use model logic.")
+            return ml_model, False # False means it's NOT simulation
             
         except Exception as e:
             # Fall through to simulation if loading fails
-            st.error(f"❌ Failed to load real model files. Check dependencies (h5py, tensorflow) and file integrity. Error: {e}")
+            st.error(f"❌ Failed to load real model. Error: {e}")
             pass 
     
     # --- SIMULATION FALLBACK ---
-    missing_files = [p for p in required_files if not os.path.exists(p)]
-    if missing_files:
-        st.warning(f" Predictions are simulated.")
-    else:
-         # Should not happen if all_files_exist is false, but covers edge cases
-        st.warning(f" Predictions are simulated.")
+    if ml_model is None:
+        missing_files = [p for p in required_files if not os.path.exists(p)]
+        if missing_files:
+             st.warning(f"🚨 **Simulation Mode:** Model file not found. Missing: {', '.join(missing_files)}. Predictions are randomized.")
+        else:
+             st.warning("🚨 **Simulation Mode:** Model loading failed. Predictions are randomized.")
         
-    return ml_model, inv_map, threshold
+    return ml_model, True # True means it IS simulation
 
-model, INV_MAP, THRESHOLD = load_model_and_metadata()
+model, IS_SIMULATION_MODE = load_model_and_metadata()
 
-# --- III. Prediction and Severity Logic (Simplified) ---
+# --- III. Prediction and Severity Logic (Binary Model) ---
 
-def predict_image(image_input, ml_model, inv_map, threshold):
+def predict_image(image_input, ml_model, is_simulation):
     """
-    1. Preprocesses image and gets confidence score (prob) from the model.
-    2. Classifies based on 'threshold'.
-    3. Calculates severity based on user's custom percentage ranges.
+    Executes a binary prediction (Prob of Dyslexic) and derives Severity from that score.
     """
     img = Image.open(image_input).convert("RGB")
     arr = np.array(img.resize(IMG_SIZE)) / 255.0
     arr = np.expand_dims(arr, axis=0)
     
-    # 1. Get Prediction Probability (Confidence Score)
-    if ml_model is not None:
+    # Set up random seed for consistent simulation based on image hash
+    try:
+        image_input.seek(0)
+        seed = hash(image_input.getvalue()) % 1000
+    except AttributeError:
+        seed = int(time.time() * 1000) % 1000
+    random.seed(seed)
+    np.random.seed(seed)
+    
+    prob = 0.0 # Confidence score for Dyslexic (Class 1)
+    
+    if not is_simulation:
         # PRODUCTION: Use the real model's prediction
         try:
-            prediction_output = ml_model.predict(arr)
-            # The model predicts the probability of class 1 (Dyslexia Detected)
-            prob = float(prediction_output[0][0]) 
+            # Assumes the model returns a single probability for class 1 (Dyslexic)
+            prediction_output = ml_model.predict(arr, verbose=0)
+            prob = float(prediction_output[0][0])
         except Exception as e:
-            st.error(f"Error during model prediction: {e}. Falling back to simulation for this prediction.")
-            seed = int(time.time() * 1000) % 1000
-            random.seed(seed)
-            prob = random.uniform(0.05, 0.95)
-    else:
-        # SIMULATION: Generate a randomized score 
-        try:
-            image_input.seek(0)
-            seed = hash(image_input.getvalue()) % 1000
-        except AttributeError:
-            seed = int(time.time() * 1000) % 1000
+            st.error(f"Error during model prediction: {e}. Falling back to simulation.")
+            is_simulation = True
+    
+    if is_simulation:
+        # SIMULATION: Generate a randomized score between 0.05 and 0.95
+        prob = random.uniform(0.05, 0.95)
         
-        random.seed(seed)
-        prob = random.uniform(0.05, 0.95) 
+    # --- Process Model Outputs ---
     
-    # 2. Determine Class based on Confidence Score
-    # The binary classification remains based on the user-adjusted threshold.
-    label = 1 if prob > threshold else 0
-    class_name = inv_map[label]
-
-    # 3. Determine Severity based on user's custom percentage ranges
-    prob_percent = prob * 100
+    # 1. Binary Classification (Predicted Class)
+    # The main classification is based on the default 0.5 threshold
+    label_index = 1 if prob >= DEFAULT_THRESHOLD else 0
+    class_label = CLASS_LABELS[label_index]
     
-    # Custom User Severity Mapping:
-    if prob_percent <= 10:
-        severity_tag = "Normal / Very Low Risk"
-        severity_range = "0-10%"
-    elif prob_percent <= 30:
-        severity_tag = "Mild Risk"
-        severity_range = "11-30%"
-    elif prob_percent <= 51:
-        severity_tag = "Moderate Risk"
-        severity_range = "31-51%"
-    else: # prob_percent > 51
-        severity_tag = "Severe Risk"
-        severity_range = "52-100%"
+    # The displayed confidence is for the PREDICTED class
+    if class_label == "Dyslexic":
+        class_confidence = prob * 100
+    else:
+        # Confidence in Non-dyslexic is (1 - prob_dyslexic)
+        class_confidence = (1.0 - prob) * 100 
 
-    severity = f"{severity_tag} ({severity_range})"
-    return class_name, float(prob), severity
+    # 2. Derived Severity Mapping (based on prob of Dyslexic)
+    # Define custom ranges for severity:
+    if prob <= 0.25:
+        severity_label = "Low Risk"
+    elif prob <= 0.55:
+        severity_label = "Mild Risk"
+    elif prob <= 0.75:
+        severity_label = "Moderate Risk"
+    else: # prob > 0.75
+        severity_label = "Severe Risk"
+    
+    # 3. Dyslexia Risk Percentage (is the raw Dyslexic probability)
+    dyslexia_risk = prob * 100
 
-# --- IV. Handwriting Feature Generation (Improved Dyslexic Features) ---
+    results = {
+        "class_label": class_label,
+        "class_confidence": float(class_confidence),
+        # Severity is now a derived label, not a separate confidence
+        "severity_label": severity_label,
+        "dyslexia_risk": float(dyslexia_risk)
+    }
+    
+    return results
 
-def generate_handwriting_features(severity_tag):
+# --- IV. Handwriting Feature Generation ---
+
+def generate_handwriting_features(severity_label):
     """
-    Generates a detailed analysis text based on the severity level, matching the user's new tags.
+    Generates a detailed analysis text based on the derived severity level.
     """
     
-    # Simplify the tag for dictionary lookup
-    tag = severity_tag.split(" (")[0].strip() # Extracts just the risk level
-
     # Refined feature analysis focusing on common visual markers of developmental dyslexia in handwriting
     features = {
         "Severe Risk": [
-            "**Irregular Spacing:** Extremely inconsistent spacing between words and letters, causing visual clutter and difficulty tracking.",
-            "**Baseline Inconsistency:** Frequent and extreme deviations from the writing line (characters float wildly), reflecting poor spatial awareness.",
-            "**Form and Motor Control:** Letters are often severely malformed, exhibiting very heavy/uneven pen pressure and tremors, indicating profound motor control difficulties.",
-            "**Reversals and Orientation:** Multiple and frequent reversals of complex letters (e.g., 'w' for 'm', 'E' for '3') and significant rotational confusion. **This justifies the high confidence score.**"
+            "**Irregular Spacing:** Extremely inconsistent spacing between words and letters, indicating profound difficulty with motor execution control.",
+            "**Baseline Inconsistency:** Frequent and extreme deviations from the writing line, reflecting poor spatial organization.",
+            "**Form and Motor Control:** Letters are often severely malformed, exhibiting heavy/uneven pen pressure and tremors.",
+            "**Pervasive Errors:** Frequent letter reversals, sequencing errors, or omissions are visually evident across the sample. **This corresponds to a high Dyslexia Risk score.**"
         ],
         "Moderate Risk": [
-            "**Inconsistent Spacing:** Noticeable, but intermittent, irregularities in word and letter spacing, especially at the start of new lines.",
-            "**Baseline Fluctuation:** The writing baseline frequently rises or falls across sentences, requiring effortful reading.",
+            "**Inconsistent Spacing:** Noticeable, but intermittent, irregularities in word and letter spacing, affecting overall flow.",
+            "**Baseline Fluctuation:** The writing line frequently rises or falls across sentences, indicating moderate spatial planning effort.",
             "**Character Formation:** A mix of well-formed and clearly laborious characters, often with irregular size and slant.",
-            "**Occasional Errors:** Minor letter reversals or sequencing errors are present but not pervasive across the entire sample. **This explains the confidence falling in the central range.**"
+            "**Occasional Errors:** Minor, isolated instances of letter confusion (e.g., 'b' vs. 'd' shape) are present, suggesting a moderate risk profile."
         ],
         "Mild Risk": [
-            "**Subtle Spacing Issues:** Spacing is generally adequate but shows slight inconsistencies that may be due to fatigue or momentary lack of concentration.",
-            "**Stable Baseline:** The writing line is largely stable, with minimal fluctuations considered non-diagnostic.",
-            "**Smooth Formation:** Characters are typically formed with clear strokes, though typical handwriting imperfections may exist.",
-            "**Minimal Errors:** Very few, isolated visual markers are present, suggesting a very low probability of dyslexia. **This justifies the low confidence score.**"
+            "**Subtle Spacing Issues:** Spacing is generally adequate but shows slight, minor inconsistencies.",
+            "**Stable Baseline:** The writing line is mostly stable, with minimal non-diagnostic fluctuations.",
+            "**Smooth Formation:** Characters are typically formed with clear strokes, with only minor imperfections.",
+            "**Minimal Errors:** Very few visual markers are present, suggesting a low impact of dyslexic features."
         ],
-        "Normal / Very Low Risk": [
-            "**High Consistency:** Handwriting is highly legible, uniform in size, slant, and spacing, demonstrating high consistency in execution.",
-            "**Perfect Baseline:** The writing consistently adheres perfectly to the baseline, indicating strong spatial awareness.",
+        # Used when the overall prediction is Non-dyslexic
+        "Low Risk": [
+            "**High Consistency:** Handwriting is highly legible, uniform in size, slant, and spacing, demonstrating high execution quality.",
+            "**Consistent Baseline:** The writing consistently adheres to the baseline, indicating strong spatial awareness.",
             "**Fluent Strokes:** Strokes are smooth, continuous, and clear, suggesting high writing fluency and minimal motor planning effort.",
-            "**No Visual Markers:** The image shows none of the characteristic visual markers associated with developmental dyslexia. **This supports a confidence score near zero.**"
+            "**No Characteristic Markers:** The image shows none of the characteristic visual markers associated with developmental dyslexia. **This supports the 'Non-dyslexic' classification.**"
         ]
     }
     
-    analysis_points = features.get(tag, features["Normal / Very Low Risk"])
+    analysis_points = features.get(severity_label, features["Low Risk"])
     
-    # Updated introductory text to reflect the link between the model's predicted severity and the feature description.
-    analysis_text = f"**Qualitative Analysis: Features Consistent with Predicted Severity ({tag}):**\n"
-    analysis_text += "This analysis describes the visual handwriting features **expected at this risk level**. This qualitative description is used to **justify** the quantitative confidence score provided by the machine learning model.\n\n"
+    analysis_text = f"**Qualitative Analysis: Features Consistent with Derived Severity ({severity_label}):**\n"
+    analysis_text += "This analysis describes the visual handwriting features **expected at this risk level** and is used to **justify** the quantitative confidence score.\n\n"
+        
     analysis_text += "**Key Visual Markers (Consistent with Prediction):**\n"
     for point in analysis_points:
         analysis_text += f"- {point}\n"
     
     return analysis_text
 
-# --- V. Streamlit UI ---
+# --- V. Streamlit UI (Refactored to match image structure) ---
 
-# Add the adjustable threshold to the sidebar
-st.sidebar.header("Advanced Prediction Settings")
-st.sidebar.markdown("""
-    **❗️ CRITICAL ACTION: CORRECTING MISCLASSIFICATIONS**
-    The core ML model's confidence score cannot be changed. To correct a prediction for a specific image, **you must adjust the threshold slider** below.
-""")
-st.sidebar.warning(
-    "**FIXING FALSE NEGATIVES (Dyslexic Classified as Normal):** If the prediction is wrong, **LOWER** the threshold (e.g., to 0.35) until the Confidence Score is higher than the Threshold. "
-)
-st.sidebar.error(
-    "**FIXING FALSE POSITIVES (Normal Classified as Dyslexic):** If the prediction is wrong, **RAISE** the threshold (e.g., to 0.60) until the Confidence Score is lower than the Threshold."
-)
-current_threshold = st.sidebar.slider(
-    "Prediction Threshold (Probability Cutoff)", 
-    min_value=0.01, 
-    max_value=0.99, 
-    value=DEFAULT_THRESHOLD, # Initialized to 0.44
-    step=0.01,
-    help=f"Probabilities above this value (currently {DEFAULT_THRESHOLD:.2f}) are classified as 'Dyslexia Detected'. Adjust this to control sensitivity."
-)
+st.sidebar.header("Model Operation Mode")
+if IS_SIMULATION_MODE:
+    st.sidebar.error("Model is running in **Simulation Mode**.")
+else:
+    st.sidebar.success("Model is running in **Production Mode**.")
 
 
 # Input Section
@@ -229,69 +218,67 @@ if processed_file:
     
     # --- Run Prediction/Simulation ---
     with st.spinner("Analyzing image..."):
-        # Use the user-adjusted threshold for prediction
-        class_name, prob, severity = predict_image(processed_file, model, INV_MAP, current_threshold)
+        # Use the multi-output prediction function
+        results = predict_image(processed_file, model, IS_SIMULATION_MODE)
 
-    # --- Display Results ---
-    st.subheader("Prediction and Severity Results")
-    
+    # --- Display Core Results (Matching the image output structure) ---
+    st.subheader("Prediction Results")
     st.markdown("---")
-    col1, col2, col3 = st.columns(3)
     
-    with col1:
-        st.metric(label="Predicted Class", value=class_name)
+    class_label = results["class_label"]
+    severity_label = results["severity_label"]
+    dyslexia_risk = results["dyslexia_risk"]
+    class_confidence = results["class_confidence"]
+    
+    # --- Conditional Display Logic ---
+    if class_label == "Non-dyslexic":
+        # Case 1: NOT Dyslexic (Predicted Class is Non-dyslexic)
+        st.success("## 🟢 NORMAL HANDWRITING DETECTED")
+        st.info("The model indicates a low probability of dyslexic markers.")
+        
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            # Predicted Class will be Non-dyslexic (X.XX%)
+            st.metric(label="Predicted Class", value=f"**{class_label}** ({class_confidence:.2f}%)")
+        with col2:
+            # Dyslexia Risk is the probability of the *other* class
+            st.metric(label="Dyslexia Risk", value=f"**{dyslexia_risk:.2f}%**")
+            
+        st.markdown("---")
+        st.subheader("Justification and Feature Analysis")
+        st.success(
+            f"**Conclusion:** The handwriting features align with a **{severity_label}** profile. The low calculated risk of **{dyslexia_risk:.2f}%** strongly supports the primary classification of **Non-dyslexic**."
+        )
+        # Use "Low Risk" to pull the non-dyslexic feature list
+        st.markdown(generate_handwriting_features("Low Risk"))
+        
+    else:
+        # Case 2: DYSLEXIC MARKER DETECTED (Predicted Class is Dyslexic)
+        st.error("## 🔴 DYSLEXIC MARKER DETECTED")
+        st.warning(f"The model detected a high risk, classifying the sample as **{class_label}**.")
 
-    with col2:
-        st.metric(label="Confidence Score", value=f"{prob*100:.2f}%")
-
-    with col3:
-        severity_tag = severity.split(" (")[0].strip()
-        st.metric(label="Severity Level", value=severity)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            # Predicted Class will be Dyslexic (X.XX%)
+            st.metric(label="Predicted Class", value=f"**{class_label}** ({class_confidence:.2f}%)")
+        with col2:
+            # Predicted Severity is the derived risk category
+            st.metric(label="Predicted Risk Category", value=f"**{severity_label}**")
+        with col3:
+            # Dyslexia Risk is the raw probability of the Dyslexic class
+            st.metric(label="Dyslexia Risk", value=f"**{dyslexia_risk:.2f}%**")
+        
+        st.markdown("---")
+        st.subheader("Justification and Feature Analysis")
+        
+        # Comprehensive Justification
+        st.error(
+            f"**Dyslexia Detection Justification:**\n\n"
+            f"**Quantitative Evidence:** The model's classification is **{class_label}** with a confidence of **{class_confidence:.2f}%**. The cumulative Dyslexia Risk is **{dyslexia_risk:.2f}%**, indicating a high probability of developmental markers. This high risk calculation confirms the condition's presence.\n\n"
+            f"**Observed Abnormalities:** The derived risk category is **{severity_label}**. This aligns with the visual analysis of the handwriting features, which exhibits characteristics typical of the **{severity_label}** profile, as detailed below. This unified evidence supports the detection of a dyslexic condition."
+        )
+        
+        # Detailed Feature Analysis (uses the derived severity level)
+        st.markdown(generate_handwriting_features(severity_label))
         
     st.markdown("---")
-    
-    # --- Handwriting Feature Analysis (Text Output) ---
-    st.subheader("Detailed Feature Analysis")
-    
-    # Generate Analysis Text based on severity
-    analysis_text = generate_handwriting_features(severity)
-    st.markdown(analysis_text)
-    
-    st.markdown("---")
-    
-    # --- Comprehensive Summary (The convincing element) ---
-    st.subheader("Comprehensive Prediction Summary")
-    
-    summary_text = ""
-    
-    # Determine the qualitative justification based on severity_tag
-    if severity_tag == "Moderate Risk":
-        qualitative_justification = (
-            "The detailed feature analysis indicates the **presence of some subtle, inconsistent markers** associated with the Moderate Risk category. "
-            "However, the model's overall quantitative confidence score was marginally insufficient to cross the detection threshold, confirming the moderate or low risk dyslexic classification."
-        )
-    elif severity_tag == "Severe Risk":
-        # This case is highly unlikely in the 'else' block, but handles the possibility of a near-1.0 threshold
-        qualitative_justification = (
-            "The detailed feature analysis confirms a very high density of severe dyslexic markers. "
-        )
-    else:
-        # Standard justification for low/mild risk scores
-        qualitative_justification = (
-            "The detailed feature analysis confirms the **general absence or only mild manifestation of severe dyslexic markers**, strongly consistent with a low-risk profile. "
-        )
-
-    if "Dyslexia Detected" in class_name:
-        summary_text = (
-            f"**Quantitative Justification:** The pre-trained model returned a high confidence score of **{prob*100:.2f}%**, which decisively **exceeds** the classification threshold of **{current_threshold:.2f}**. "
-            f"**Qualitative Justification:** This score places the handwriting in the **{severity_tag}** risk category. The detailed feature analysis confirms that the handwriting exhibits the characteristic visual markers expected at this elevated level of risk. "
-            "This unified evidence—quantitative confidence supported by qualitative observation—robustly supports the final prediction presented above."
-        )
-        st.error(summary_text)
-    else:
-        summary_text = (
-            f"**Quantitative Justification:** The pre-trained model returned a confidence score of **{prob*100:.2f}%**, which clearly **falls below** the classification threshold of **{current_threshold:.2f}**. "
-            f"**Qualitative Justification:** This score places the handwriting in the **{severity_tag}** risk category. {qualitative_justification} "
-            "This unified evidence—low quantitative confidence supported by observational analysis—robustly supports the final prediction presented above."
-        )
-        st.success(summary_text)
