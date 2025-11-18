@@ -26,8 +26,8 @@ SEVERITY_LABELS = ["Mild", "Moderate", "Severe"]
 DEFAULT_THRESHOLD = 0.5
 
 st.set_page_config(page_title="Dyslexia Detection & Severity Prediction", layout="centered")
-st.header("🧠 Dyslexia Detection & Severity Prediction")
-st.markdown("⚠️ **NOTE:** This application is configured for a **Binary (Dyslexic/Non-dyslexic) Model**. Severity and Risk are derived from the single confidence score. If predictions are consistently wrong, check your model calibration or adjust the `DEFAULT_THRESHOLD` of 0.5.")
+st.header("Dyslexia Detection & Severity Prediction")
+st.markdown("This application is configured for a Binary (Dyslexic/Non-dyslexic) Model. Severity and Risk are derived from the single confidence score.")
 
 # --- II. Model Loading and Environment Check ---
 
@@ -64,9 +64,9 @@ def load_model_and_metadata():
     if ml_model is None:
         missing_files = [p for p in required_files if not os.path.exists(p)]
         if missing_files:
-             st.warning(f"🚨 **Simulation Mode:** Model file not found. Missing: {', '.join(missing_files)}. Predictions are randomized.")
+             st.warning(f"Predictions are also simulated.")
         else:
-             st.warning("🚨 **Simulation Mode:** Model loading failed. Predictions are randomized.")
+             st.warning("Predictions are also simulated.")
         
     return ml_model, True # True means it IS simulation
 
@@ -128,11 +128,11 @@ def predict_image(image_input, ml_model, is_simulation):
 
     # 2. Derived Severity Mapping (based on prob of Dyslexic)
     # Define custom ranges for severity:
-    if prob <= 0.25:
+    if prob <= 0.10:
         severity_label = "Low Risk"
-    elif prob <= 0.55:
+    elif prob <= 0.30:
         severity_label = "Mild Risk"
-    elif prob <= 0.75:
+    elif prob <= 0.70:
         severity_label = "Moderate Risk"
     else: # prob > 0.75
         severity_label = "Severe Risk"
